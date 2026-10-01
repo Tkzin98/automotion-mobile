@@ -1,21 +1,22 @@
-# AutoMotion Mobile V9
+# AutoMotion Mobile V10
 
-V9 divide o trabalho em duas partes:
+A V10 separa completamente a interface do processamento pesado.
 
-- Celular: vídeo, Whisper, timestamps, detecção de afirmações e planejamento das visualizações.
-- Google Colab: renderização final com FFmpeg, para não travar o navegador do celular.
+## No celular / HTML
+- seleção e prévia do vídeo
+- instrução da edição
+- criação e edição de visualizações
+- início/fim de cada elemento
+- exportação de projeto em ZIP
 
-## Fluxo
-1. Abra o AutoMotion e escolha o vídeo.
-2. Analise as informações.
-3. Toque em **Exportar projeto para Colab**.
-4. Baixe o `automotion-astronomia-project.json`.
-5. Abra `colab/AutoMotion_Renderer.ipynb` no Google Colab.
-6. No notebook, envie o JSON e o vídeo original.
-7. Execute o render e baixe o MP4 final.
+## No Google Colab
+- recebe vídeo + projeto.json
+- análise/transcrição
+- geração das visualizações
+- FFmpeg
+- renderização final
 
-O botão WebM local continua disponível somente para testes curtos.
+O navegador não renderiza o MP4 final.
 
-## GitHub Pages
-Depois de copiar a pasta para `main`, o notebook poderá ser aberto pelo Colab usando:
-`https://colab.research.google.com/github/tkzin98/automotion-mobile/blob/main/colab/AutoMotion_Renderer.ipynb`
+## Publicação
+Envie os arquivos para a raiz do GitHub Pages. O notebook fica em `colaboração/AutoMotion_Renderer.ipynb`.
