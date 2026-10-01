@@ -1,6 +1,8 @@
-import {ALL_FORMATS,BlobSource,BufferTarget,Conversion,Input,Mp4OutputFormat,Output,Quality,WavOutputFormat} from "https://esm.sh/mediabunny@1.61.0?bundle&v=12.2.0";
-import {pipeline,env} from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0/+esm";
-env.allowLocalModels=false;env.allowRemoteModels=true;
+const MB_URL="https://esm.sh/mediabunny@1.61.0?bundle";
+const HF_URL="https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0";
+let MB=null, HF=null;
+async function loadMedia(){if(MB)return MB;status("Carregando motor de mídia",8,"Preparando o renderizador no navegador…");MB=await import(MB_URL);return MB}
+async function loadAI(){if(HF)return HF;status("Preparando IA",22,"Carregando o motor Whisper no navegador…");HF=await import(HF_URL);HF.env.allowLocalModels=false;HF.env.allowRemoteModels=true;return HF}
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)],MODEL="onnx-community/whisper-tiny";
 let file=null,url=null,audioUrl=null,autoEdits=[],theme="cosmic",transcriber=null,currentRun=0;
 const ICON={comparison:"↔",scale:"◉",percentage:"%",distance:"⌁",speed:"➜",duration:"◷",timeline:"╱",count:"#",temperature:"°",fact:"✦"};
@@ -29,11 +31,11 @@ function dedupe(xs){const o=[];for(const x of [...xs].sort((a,b)=>a.start-b.star
 function setTheme(t){theme=t;$$('.theme-card').forEach(b=>b.classList.toggle("on",b.dataset.theme===t));document.documentElement.dataset.theme=t;drawPreview()}$$('.theme-card').forEach(b=>b.onclick=()=>setTheme(b.dataset.theme));
 function status(label,p=0,detail=""){$("#aiStatus").classList.remove("hide");$("#aiLabel").textContent=label;$("#aiPct").textContent=`${Math.round(p)}%`;$("#aiBar").value=Math.max(0,Math.min(1,p/100));$("#aiDetail").textContent=detail}
 function results(){const list=$("#autoList");$("#autoCount").textContent=`${autoEdits.length} visuais automáticos`;if(!autoEdits.length){list.innerHTML='<div class="empty big"><div class="emptyIcon">∿</div><b>Nenhum dado objetivo encontrado ainda.</b><small>O motor procura números, relações, distâncias, velocidades, temperaturas, tempos e quantidades na narração.</small></div>';return}list.innerHTML=autoEdits.map((e,i)=>`<article class="auto-item ${e.enabled===false?'off':''}"><button class="auto-toggle" data-i="${i}">${e.enabled===false?'○':'✓'}</button><div class="auto-icon">${ICON[e.type]}</div><div class="auto-main"><div class="auto-top"><b>${esc(e.title)}</b><span>${tm(e.start)} → ${tm(e.end)}</span></div><strong>${esc(e.data)}</strong><small>${esc(e.subtitle||e.text||"")}</small></div></article>`).join("");$$('.auto-toggle').forEach(b=>b.onclick=()=>{const e=autoEdits[+b.dataset.i];e.enabled=e.enabled===false;results();drawPreview()})}
-async function extractAudio(f,run){const input=new Input({formats:ALL_FORMATS,source:new BlobSource(f,{maxCacheSize:16*1024*1024,useStreamReader:true})}),target=new BufferTarget(),output=new Output({format:new WavOutputFormat(),target}),conv=await Conversion.init({input,output,audio:{sampleRate:16000,numberOfChannels:1}});conv.onProgress(p=>{if(run===currentRun)status("Preparando o áudio",5+p*18,`Extraindo áudio • ${Math.round(p*100)}%`)});await conv.execute();const buf=output.target.buffer;if(!buf)throw Error("Não foi possível extrair o áudio do vídeo.");return new Blob([buf],{type:"audio/wav"})}
-async function model(run){if(transcriber)return transcriber;const webgpu=!!navigator.gpu,base={progress_callback:p=>{const q=Number.isFinite(p?.progress)?p.progress:0;status("Baixando modelo de transcrição",25+q*20,p?.file?String(p.file).split('/').pop():"Whisper local")}};try{transcriber=await pipeline("automatic-speech-recognition",MODEL,webgpu?{device:"webgpu",dtype:"q4",...base}:{dtype:"q8",...base});return transcriber}catch(e){if(webgpu){status("Modo compatível",25,"A aceleração gráfica não iniciou; tentando CPU no navegador.");transcriber=await pipeline("automatic-speech-recognition",MODEL,{dtype:"q8",...base});return transcriber}throw e}}
+async function extractAudio(f,run){const {ALL_FORMATS,BlobSource,BufferTarget,Conversion,Input,Output,WavOutputFormat}=await loadMedia();const input=new Input({formats:ALL_FORMATS,source:new BlobSource(f,{maxCacheSize:16*1024*1024,useStreamReader:true})}),target=new BufferTarget(),output=new Output({format:new WavOutputFormat(),target}),conv=await Conversion.init({input,output,audio:{sampleRate:16000,numberOfChannels:1}});conv.onProgress(p=>{if(run===currentRun)status("Preparando o áudio",5+p*18,`Extraindo áudio • ${Math.round(p*100)}%`)});await conv.execute();const buf=output.target.buffer;if(!buf)throw Error("Não foi possível extrair o áudio do vídeo.");return new Blob([buf],{type:"audio/wav"})}
+async function model(run){if(transcriber)return transcriber;const {pipeline}=await loadAI();const webgpu=!!navigator.gpu,base={progress_callback:p=>{const q=Number.isFinite(p?.progress)?p.progress:0;status("Baixando modelo de transcrição",25+q*20,p?.file?String(p.file).split('/').pop():"Whisper local")}};try{transcriber=await pipeline("automatic-speech-recognition",MODEL,webgpu?{device:"webgpu",dtype:"q4",...base}:{dtype:"q8",...base});return transcriber}catch(e){if(webgpu){status("Modo compatível",25,"A aceleração gráfica não iniciou; tentando CPU no navegador.");transcriber=await pipeline("automatic-speech-recognition",MODEL,{dtype:"q8",...base});return transcriber}throw e}}
 async function analyze(){if(!file)return;const run=++currentRun;autoEdits=[];results();$("#analyzeBtn").disabled=true;$("#autoBadge").textContent="ANALISANDO";$("#transcript").textContent="Preparando narração…";try{const wav=await extractAudio(file,run);if(run!==currentRun)return;if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl=URL.createObjectURL(wav);const pipe=await model(run);status("Transcrevendo a narração",48,"Whisper está identificando a fala e seus tempos…");const out=await pipe(audioUrl,{language:"portuguese",task:"transcribe",return_timestamps:true,chunk_length_s:30,stride_length_s:5});if(run!==currentRun)return;$("#transcript").textContent=String(out?.text||"").trim()||"Narração sem texto detectável.";status("Extraindo fatos",78,"Convertendo frases objetivas em visualizações…");const found=[];for(const s of sentenceChunks(out?.chunks||[])){const c=claim(s.text);if(!c)continue;found.push({...c,id:crypto.randomUUID(),start:Math.max(0,s.start-.18),end:Math.min($("#video").duration||s.end,s.end+.32),text:s.text,enabled:true})}autoEdits=dedupe(found);status("Projeto automático pronto",100,`${autoEdits.length} visualizações criadas a partir da narração.`);results();drawPreview();toast(`${autoEdits.length} visualizações criadas automaticamente`)}catch(e){console.error(e);status("Não foi possível analisar",0,e?.message||"Erro de transcrição");$("#transcript").textContent="A análise automática falhou. Verifique se o vídeo possui áudio e tente novamente.";toast("Falha na análise automática")}finally{$("#analyzeBtn").disabled=false;$("#autoBadge").textContent="AUTOMÁTICO";if($("#video").duration){$("#test").disabled=false;$("#render").disabled=false}}}
 function setFile(f){if(!f)return;file=f;autoEdits=[];results();$("#transcript").textContent="Aguardando análise…";if(url)URL.revokeObjectURL(url);url=URL.createObjectURL(f);const v=$("#video");v.src=url;v.onloadedmetadata=()=>{$("#seek").max=v.duration||1;$("#test").disabled=false;$("#render").disabled=false;drawPreview();toast("Vídeo carregado • iniciando análise automática");setTimeout(analyze,300)};$("#stage").classList.remove("hide");$("#controls").classList.remove("hide");$("#fileInfo").classList.remove("hide");$("#fileInfo").innerHTML=`<b>${esc(f.name)}</b><span>${(f.size/1048576).toFixed(1)} MB</span>`}
-$("#file").onchange=e=>setFile(e.target.files?.[0]);$("#drop").onclick=()=>$("#file").click();$("#drop").ondragover=e=>e.preventDefault();$("#drop").ondrop=e=>{e.preventDefault();setFile(e.dataTransfer.files?.[0])};$("#analyzeBtn").onclick=analyze;
+$("#file").onchange=e=>{setFile(e.target.files?.[0]);e.target.value=""};$("#drop").ondragover=e=>e.preventDefault();$("#drop").ondrop=e=>{e.preventDefault();setFile(e.dataTransfer.files?.[0])};$("#analyzeBtn").onclick=analyze;
 $("#video").ontimeupdate=()=>{$("#seek").value=$("#video").currentTime||0;$("#clock").textContent=`${tm($("#video").currentTime)} / ${tm($("#video").duration)}`;drawPreview()};$("#seek").oninput=()=>{$("#video").currentTime=+$("#seek").value;drawPreview()};$("#play").onclick=()=>{const v=$("#video");if(v.paused){v.play();$("#play").textContent="❚❚"}else{v.pause();$("#play").textContent="▶"}};
 function ctx(){const r=$("#stage").getBoundingClientRect(),c=$("#overlay"),d=Math.min(2.2,devicePixelRatio||1);c.width=Math.max(2,Math.floor(r.width*d));c.height=Math.max(2,Math.floor(r.height*d));const g=c.getContext("2d");g.setTransform(d,0,0,d,0,0);return[g,r.width,r.height]}
 function ease(p){return p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2}function box(g,x,y,w,h,r){g.beginPath();g.roundRect(x,y,w,h,r)}function pal(){return theme==="editorial"?{bg:"rgba(245,247,252,.94)",fg:"#0b101a",muted:"#657087",a:"#3645d8",b:"#7d57d9",grid:"rgba(13,18,30,.12)"}:theme==="aurora"?{bg:"rgba(7,15,24,.91)",fg:"#f2ffff",muted:"#9bb3c3",a:"#55e0ff",b:"#9b7cff",grid:"rgba(115,224,255,.15)"}:theme==="mono"?{bg:"rgba(9,11,14,.95)",fg:"#f7f7f5",muted:"#9da0a6",a:"#fff",b:"#8e949f",grid:"rgba(255,255,255,.13)"}:{bg:"rgba(8,12,22,.92)",fg:"#f7f9ff",muted:"#99a8bf",a:"#6fd4ff",b:"#9f81ff",grid:"rgba(130,160,255,.16)"}}
@@ -45,7 +47,65 @@ else if(e.type==="duration"||e.type==="timeline"){g.fillStyle=c.fg;g.font="900 2
 else if(e.type==="count"||e.type==="temperature"){g.fillStyle=c.fg;g.font="900 24px system-ui";g.fillText(e.data||"",x+18,80);g.fillStyle=c.muted;g.font="600 9px system-ui";g.fillText(e.subtitle||"",x+18,98)}
 else{g.fillStyle=c.fg;g.font="900 17px system-ui";g.fillText(e.data||e.subtitle||e.text||"",x+18,76)}g.restore()}
 function drawPreview(){if(!file||$("#stage").classList.contains("hide"))return;const[g,w,h]=ctx();g.clearRect(0,0,w,h);autoEdits.forEach(e=>draw(g,e,$("#video").currentTime||0,w,h))}addEventListener("resize",drawPreview);
-async function render(test){if(!file||!autoEdits.some(e=>e.enabled!==false)){toast("Nenhuma visualização ativa para renderizar");return}if(!("VideoEncoder"in window)){toast("WebCodecs não está disponível neste navegador");return}$("#render").disabled=true;$("#test").disabled=true;$("#progress").classList.remove("hide");try{const input=new Input({formats:ALL_FORMATS,source:new BlobSource(file,{maxCacheSize:16*1024*1024,useStreamReader:true})}),duration=await input.computeDuration(),end=test?Math.min(10,duration):duration;let target=new BufferTarget,output=new Output({format:new Mp4OutputFormat(),target}),cc=null;const opts={codec:"avc",quality:new Quality("medium"),hardwareAcceleration:"prefer-hardware",forceTranscode:true,process:s=>{if(!cc){const can=new OffscreenCanvas(s.displayWidth,s.displayHeight);cc=can.getContext("2d")}cc.clearRect(0,0,cc.canvas.width,cc.canvas.height);s.draw(cc,0,0);autoEdits.forEach(e=>draw(cc,e,s.timestamp,cc.canvas.width,cc.canvas.height));return cc.canvas}};let conv;try{conv=await Conversion.init({input,output,tracks:"primary",trim:{end},video:opts});if(!conv.isValid)throw Error("Conversão inválida")}catch(first){target=new BufferTarget;output=new Output({format:new Mp4OutputFormat(),target});conv=await Conversion.init({input,output,tracks:"primary",trim:{end},video:{...opts,hardwareAcceleration:"no-preference"})}conv.onProgress=p=>{$("#bar").value=p;$("#ppct").textContent=`${Math.round(p*100)}%`};await conv.execute();const buf=output.target.buffer;if(!buf)throw Error("Arquivo final não foi gerado");const href=URL.createObjectURL(new Blob([buf],{type:"video/mp4"}));$("#result").classList.remove("hide");$("#result").innerHTML=`<div class="success"><b>✓ Render concluído</b><a href="${href}" download="AutoMotion_${test?"teste_10s":"final"}.mp4">⬇️ Salvar MP4</a></div>`;toast("Render concluído")}catch(e){console.error(e);status("Falha na renderização",0,e?.message||"Erro desconhecido");toast("Falha ao renderizar")}finally{$("#render").disabled=false;$("#test").disabled=false}}
+async function render(test){
+  if(!file||!autoEdits.some(e=>e.enabled!==false)){toast("Nenhuma visualização ativa para renderizar");return}
+  if(!("VideoEncoder" in window)){toast("WebCodecs não está disponível neste navegador");return}
+  $("#render").disabled=true;
+  $("#test").disabled=true;
+  $("#progress").classList.remove("hide");
+  try{
+    const {ALL_FORMATS,BlobSource,BufferTarget,Conversion,Input,Mp4OutputFormat,Output,Quality}=await loadMedia();
+    const input=new Input({formats:ALL_FORMATS,source:new BlobSource(file,{maxCacheSize:16*1024*1024,useStreamReader:true})});
+    const duration=await input.computeDuration();
+    const end=test?Math.min(10,duration):duration;
+    let target=new BufferTarget();
+    let output=new Output({format:new Mp4OutputFormat(),target});
+    let cc=null;
+    const opts={
+      codec:"avc",
+      quality:new Quality("medium"),
+      hardwareAcceleration:"prefer-hardware",
+      forceTranscode:true,
+      process:s=>{
+        if(!cc){
+          const can=new OffscreenCanvas(s.displayWidth,s.displayHeight);
+          cc=can.getContext("2d");
+        }
+        cc.clearRect(0,0,cc.canvas.width,cc.canvas.height);
+        s.draw(cc,0,0);
+        autoEdits.forEach(e=>draw(cc,e,s.timestamp,cc.canvas.width,cc.canvas.height));
+        return cc.canvas;
+      }
+    };
+    let conv;
+    try{
+      conv=await Conversion.init({input,output,tracks:"primary",trim:{end},video:opts});
+      if(!conv.isValid)throw Error("Conversão inválida");
+    }catch(first){
+      target=new BufferTarget();
+      output=new Output({format:new Mp4OutputFormat(),target});
+      conv=await Conversion.init({input,output,tracks:"primary",trim:{end},video:{...opts,hardwareAcceleration:"no-preference"}});
+    }
+    conv.onProgress=p=>{
+      $("#bar").value=p;
+      $("#ppct").textContent=`${Math.round(p*100)}%`;
+    };
+    await conv.execute();
+    const buf=output.target.buffer;
+    if(!buf)throw Error("Arquivo final não foi gerado");
+    const href=URL.createObjectURL(new Blob([buf],{type:"video/mp4"}));
+    $("#result").classList.remove("hide");
+    $("#result").innerHTML=`<div class="success"><b>✓ Render concluído</b><a href="${href}" download="AutoMotion_${test?"teste_10s":"final"}.mp4">⬇️ Salvar MP4</a></div>`;
+    toast("Render concluído");
+  }catch(e){
+    console.error(e);
+    status("Falha na renderização",0,e?.message||"Erro desconhecido");
+    toast("Falha ao renderizar");
+  }finally{
+    $("#render").disabled=false;
+    $("#test").disabled=false;
+  }
+}
 $("#render").onclick=()=>render(false);$("#test").onclick=()=>render(true);$("#help").onclick=()=>$("#modal").classList.remove("hide");$("#close").onclick=()=>$("#modal").classList.add("hide");results();setTheme("cosmic");
 
 
