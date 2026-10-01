@@ -1,29 +1,9 @@
 const MB_URL="https://esm.sh/mediabunny@1.61.0?bundle";
-const HF_URLS=["https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0","https://esm.sh/@huggingface/transformers@4.3.0?bundle"];
-const ORT_WASM="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/";
+const HF_URL="https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0/dist/transformers.web.js";
 let MB=null, HF=null;
 async function loadMedia(){if(MB)return MB;status("Carregando motor de mídia",8,"Preparando o renderizador no navegador…");MB=await import(MB_URL);return MB}
-async function loadAI(){
-  if(HF)return HF;
-  status("Preparando IA",22,"Carregando o motor Whisper no navegador…");
-  let last=null;
-  for(const src of HF_URLS){
-    try{
-      const mod=await import(src);
-      const env=mod.env;
-      env.allowLocalModels=false;
-      env.allowRemoteModels=true;
-      try{env.backends.onnx.wasm.wasmPaths=ORT_WASM}catch{}
-      HF=mod;
-      return HF;
-    }catch(e){
-      last=e;
-      console.warn("Falha ao carregar Transformers.js:",src,e);
-    }
-  }
-  throw last||new Error("Não foi possível carregar o motor de IA.");
-}
-const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)],MODEL="onnx-community/whisper-tiny";
+async function loadAI(){if(HF)return HF;status("Preparando IA",22,"Carregando o motor Whisper no navegador…");HF=await import(HF_URL);HF.env.allowLocalModels=false;HF.env.allowRemoteModels=true;return HF}
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)],MODEL="onnx-community/whisper-base";
 let file=null,url=null,audioUrl=null,autoEdits=[],theme="cosmic",transcriber=null,currentRun=0;
 const ICON={comparison:"↔",scale:"◉",percentage:"%",distance:"⌁",speed:"➜",duration:"◷",timeline:"╱",count:"#",temperature:"°",fact:"✦"};
 const ENT=["sagitario a*","via lactea","andromeda","buraco negro","sistema solar","universo","supernova","nebulosa","estrela de neutrons","estrela","sol","jupiter","saturno","urano","netuno","marte","terra","venus","mercurio","lua","plutao","galaxia"];
@@ -35,7 +15,7 @@ function num(s){const t=norm(s),m=t.match(/-?\d+(?:[.,]\d+)?/);if(!m)return null
 function showNum(n){if(!Number.isFinite(n))return"";if(Math.abs(n)>=1e9)return `${(n/1e9).toLocaleString("pt-BR",{maximumFractionDigits:2})} bi`;if(Math.abs(n)>=1e6)return `${(n/1e6).toLocaleString("pt-BR",{maximumFractionDigits:2})} mi`;if(Math.abs(n)>=1e3)return `${(n/1e3).toLocaleString("pt-BR",{maximumFractionDigits:2})} mil`;return n.toLocaleString("pt-BR",{maximumFractionDigits:2})}
 function entities(t){const n=norm(t),f=[];for(const e of ENT)if(n.includes(e)&&!f.includes(e))f.push(e);return f.map(x=>x.replace(/(^|\s)\S/g,c=>c.toUpperCase()))}
 function dur(s){if(s>=86400)return `${(s/86400).toLocaleString("pt-BR",{maximumFractionDigits:1})} dias`;if(s>=3600)return `${(s/3600).toLocaleString("pt-BR",{maximumFractionDigits:1})} h`;if(s>=60)return `${Math.floor(s/60)}m ${Math.round(s%60)}s`;return `${s.toLocaleString("pt-BR",{maximumFractionDigits:1})}s`}
-function sentenceChunks(chunks){const out=[];for(const c of chunks||[]){const text=String(c?.text||"").trim();if(!text)continue;const ts=c.timestamp||[0,0],st=Math.max(0,Number(ts[0])||0),en=Number.isFinite(Number(ts[1]))?Math.max(st+0.2,Number(ts[1])):st+Math.max(1.2,Math.min(8,text.split(/\s+/).length*.34));const parts=text.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[text];if(parts.length===1){out.push({text:parts[0].trim(),start:st,end:en});continue}let cursor=0;for(const part0 of parts){const raw=part0.trim();if(!raw)continue;const idx=text.indexOf(raw,cursor);const a=st+Math.max(0,idx)/text.length*(en-st);const b=st+Math.min(text.length,idx+raw.length)/text.length*(en-st);cursor=idx+raw.length;out.push({text:raw,start:a,end:Math.max(a+0.8,b)})}}return out}
+function sentenceChunks(chunks){const out=[];for(const c of chunks||[]){const text=String(c?.text||"").trim();if(!text)continue;const ts=c.timestamp||[0,0],st=Number(ts[0])||0,en=Number.isFinite(Number(ts[1]))?Number(ts[1]):st+6;const re=/[^.!?]+[.!?]?/g;let m;while((m=re.exec(text))){const raw=m[0].trim();if(!raw)continue;const a=Math.max(0,st+(m.index/text.length)*(en-st)),b=Math.min(en,st+((m.index+raw.length)/text.length)*(en-st));out.push({text:raw,start:a,end:Math.max(a+1.1,b)})}}return out}
 function claim(t){const raw=t.trim(),n=norm(raw),es=entities(raw);let m;
 m=n.match(/(-?\d+(?:[.,]\d+)?)\s*%/);if(m)return{type:"percentage",value:num(m[1]),title:"Percentual",data:`${num(m[1])}%`,subtitle:es[0]||"Proporção"};
 m=n.match(/(\d+(?:[.,]\d+)?)\s*vez(?:es)?\s*(?:maior|menor|o\s+tamanho|a\s+massa|mais|menos)?\s*(?:que|do que|da|de)?/);if(m){const v=num(m[1]),small=/menor|menos/.test(n.slice(m.index,m.index+m[0].length+10)),before=n.slice(0,m.index),after=n.slice(m.index+m[0].length),first=es[0]||entities(before)[0]||"Objeto",second=es[1]||entities(after)[0]||"Referência";return{type:"comparison",value:v,title:"Escala relativa",data:`${first}=${small?1:v};${second}=${small?v:1}`,subtitle:`${showNum(v)}×`}}
@@ -50,7 +30,7 @@ return null}
 function dedupe(xs){const o=[];for(const x of [...xs].sort((a,b)=>a.start-b.start)){const l=o[o.length-1];if(l&&norm(l.text)===norm(x.text))continue;if(l&&x.start<l.end+.45&&x.type!=="comparison"&&x.type!=="percentage")continue;o.push(x)}return o.slice(0,80)}
 function setTheme(t){theme=t;$$('.theme-card').forEach(b=>b.classList.toggle("on",b.dataset.theme===t));document.documentElement.dataset.theme=t;drawPreview()}$$('.theme-card').forEach(b=>b.onclick=()=>setTheme(b.dataset.theme));
 function status(label,p=0,detail=""){$("#aiStatus").classList.remove("hide");$("#aiLabel").textContent=label;$("#aiPct").textContent=`${Math.round(p)}%`;$("#aiBar").value=Math.max(0,Math.min(1,p/100));$("#aiDetail").textContent=detail}
-function results(){const list=$("#autoList");$("#autoCount").textContent=`${autoEdits.length} visuais automáticos`;if(!autoEdits.length){list.innerHTML='<div class="empty big"><div class="emptyIcon">∿</div><b>Nenhum dado objetivo encontrado ainda.</b><small>O motor cria Motion apenas quando encontra uma afirmação objetiva com contexto, relação ou unidade científica.</small></div>';return}list.innerHTML=autoEdits.map((e,i)=>`<article class="auto-item ${e.enabled===false?'off':''}"><button class="auto-toggle" data-i="${i}">${e.enabled===false?'○':'✓'}</button><div class="auto-icon">${ICON[e.type]}</div><div class="auto-main"><div class="auto-top"><b>${esc(e.title)}</b><span>${tm(e.start)} → ${tm(e.end)}</span></div><strong>${esc(e.data)}</strong><small>${esc(e.subtitle||e.text||"")}</small></div></article>`).join("");$$('.auto-toggle').forEach(b=>b.onclick=()=>{const e=autoEdits[+b.dataset.i];e.enabled=e.enabled===false;results();drawPreview()})}
+function results(){const list=$("#autoList");$("#autoCount").textContent=`${autoEdits.length} visuais automáticos`;if(!autoEdits.length){list.innerHTML='<div class="empty big"><div class="emptyIcon">∿</div><b>Nenhum dado objetivo encontrado ainda.</b><small>O motor procura números, relações, distâncias, velocidades, temperaturas, tempos e quantidades na narração.</small></div>';return}list.innerHTML=autoEdits.map((e,i)=>`<article class="auto-item ${e.enabled===false?'off':''}"><button class="auto-toggle" data-i="${i}">${e.enabled===false?'○':'✓'}</button><div class="auto-icon">${ICON[e.type]}</div><div class="auto-main"><div class="auto-top"><b>${esc(e.title)}</b><span>${tm(e.start)} → ${tm(e.end)}</span></div><strong>${esc(e.data)}</strong><small>${esc(e.subtitle||e.text||"")}</small></div></article>`).join("");$$('.auto-toggle').forEach(b=>b.onclick=()=>{const e=autoEdits[+b.dataset.i];e.enabled=e.enabled===false;results();drawPreview()})}
 async function decodeAudio(f,run){
   status("Preparando o áudio",5,"Lendo a faixa de áudio diretamente no navegador…");
   const AC=window.AudioContext||window.webkitAudioContext;
@@ -86,21 +66,30 @@ async function decodeAudio(f,run){
 }
 async function model(run){
   if(transcriber)return transcriber;
-  const {pipeline}=await loadAI();
+  const {pipeline,env}=await loadAI();
+  env.allowLocalModels=false;
+  env.allowRemoteModels=true;
+  env.backends={...(env.backends||{})};
   const progress_callback=info=>{
     if(run!==currentRun)return;
     const p=Number.isFinite(info?.progress)?info.progress:0;
     const fileName=String(info?.file||info?.name||"").split("/").pop();
-    const pct=Math.max(20,Math.min(78,20+p*.58));
-    status("Baixando modelo de transcrição",pct,fileName?`${fileName} • ${Math.round(p)}%`:"Preparando Whisper…");
+    const shown=Math.min(78,24+p*0.52);
+    status("Baixando modelo de transcrição",shown,fileName?`${fileName} • Whisper Base`:`Whisper Base • ${Math.round(p)}%`);
   };
   try{
-    status("Preparando Whisper",23,"Modo compatível WASM — sem dependência do WebGPU…");
-    transcriber=await pipeline("automatic-speech-recognition",MODEL,{device:"wasm",dtype:"q8",progress_callback});
+    status("Preparando Whisper Base",24,"Modelo multilíngue configurado para português…");
+    // WASM é o caminho estável para GitHub Pages; evitamos o import problemático
+    // onnxruntime-web/webgpu que algumas builds do Transformers.js tentam resolver.
+    transcriber=await pipeline("automatic-speech-recognition",MODEL,{
+      device:"wasm",
+      dtype:"q8",
+      progress_callback
+    });
     return transcriber;
   }catch(e){
     transcriber=null;
-    throw Error(`Não foi possível carregar o Whisper. ${e?.message||e}`);
+    throw Error(`Falha ao carregar o Whisper Base: ${e?.message||e}`);
   }
 }
 async function analyze(){
@@ -111,12 +100,12 @@ async function analyze(){
     const audio=await decodeAudio(file,run);if(run!==currentRun||!audio)return;
     const pipe=await model(run);if(run!==currentRun)return;
     status("Transcrevendo a narração",32,"Whisper está entendendo a fala em português…");
-    const opts={language:"portuguese",task:"transcribe",return_timestamps:true,chunk_length_s:29,stride_length_s:5,do_sample:false};
+    const opts={language:"portuguese",task:"transcribe",return_timestamps:true,chunk_length_s:29,stride_length_s:5,do_sample:false,num_beams:1};
     let out;
     try{out=await pipe(audio.data,opts)}catch(first){
       console.warn("timestamped transcription failed",first);
       status("Tentando transcrição compatível",40,"Ajustando o processamento de trechos…");
-      out=await pipe(audio.data,{language:"portuguese",task:"transcribe",return_timestamps:true,chunk_length_s:29,stride_length_s:4,do_sample:false});
+      out=await pipe(audio.data,{language:"portuguese",task:"transcribe",return_timestamps:true,chunk_length_s:29,stride_length_s:4,do_sample:false,num_beams:1});
     }
     if(run!==currentRun)return;
     const full=String(out?.text||"").trim();
@@ -128,7 +117,7 @@ async function analyze(){
     if(chunks.length){
       for(const s of sentenceChunks(chunks)){
         const c=claim(s.text);if(!c)continue;
-        found.push({...c,id:crypto.randomUUID(),start:Math.max(0,s.start-.04),end:Math.min($("#video").duration||s.end,s.end+.08),text:s.text,enabled:true})
+        found.push({...c,id:crypto.randomUUID(),start:Math.max(0,s.start-.18),end:Math.min($("#video").duration||s.end,s.end+.32),text:s.text,enabled:true})
       }
     }else{
       const words=full.split(/\s+/).filter(Boolean);const total=$("#video").duration||audio.duration;const step=Math.max(1,total/Math.max(1,Math.ceil(words.length/10)));

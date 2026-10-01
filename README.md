@@ -1,13 +1,8 @@
-# AutoMotion Studio V13.2
+# AutoMotion Studio V13.0
 
-Versão corrigida do motor de IA para GitHub Pages.
+Correção do progresso do Mediabunny: `Conversion.onProgress` é configurado como propriedade antes de `execute()`.
 
-- Importação de vídeo local.
-- Escolha de design.
-- Whisper local via Transformers.js.
-- Execução do Whisper em WASM para evitar imports WebGPU não resolvidos em CDN.
-- Extração automática de fatos objetivos.
-- Visualizações sincronizadas automaticamente.
-- Renderização MP4 local com Mediabunny + WebCodecs.
+Abra no GitHub Pages com `?v=12.5` após publicar.
 
-Abra `index.html` diretamente ou publique os arquivos na raiz do GitHub Pages.
+
+V13 replaces the Mediabunny audio-to-WAV analysis path with Web Audio API decoding and a robust Transformers.js Whisper pipeline. Rendering remains local with Mediabunny + WebCodecs.
