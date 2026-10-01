@@ -1,9 +1,0 @@
-{
-  "name": "AutoMotion Mobile",
-  "short_name": "AutoMotion",
-  "start_url": "./",
-  "display": "standalone",
-  "background_color": "#08070c",
-  "theme_color": "#0b0712",
-  "description": "Editor local de motion automático para vídeos."
-}
