@@ -1,5 +1,5 @@
 const MB_URL="https://esm.sh/mediabunny@1.61.0?bundle";
-const HF_URL="https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0";
+const HF_URL="https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0/dist/transformers.web.js";
 let MB=null, HF=null;
 async function loadMedia(){if(MB)return MB;status("Carregando motor de mídia",8,"Preparando o renderizador no navegador…");MB=await import(MB_URL);return MB}
 async function loadAI(){if(HF)return HF;status("Preparando IA",22,"Carregando o motor Whisper no navegador…");HF=await import(HF_URL);HF.env.allowLocalModels=false;HF.env.allowRemoteModels=true;return HF}
@@ -31,9 +31,117 @@ function dedupe(xs){const o=[];for(const x of [...xs].sort((a,b)=>a.start-b.star
 function setTheme(t){theme=t;$$('.theme-card').forEach(b=>b.classList.toggle("on",b.dataset.theme===t));document.documentElement.dataset.theme=t;drawPreview()}$$('.theme-card').forEach(b=>b.onclick=()=>setTheme(b.dataset.theme));
 function status(label,p=0,detail=""){$("#aiStatus").classList.remove("hide");$("#aiLabel").textContent=label;$("#aiPct").textContent=`${Math.round(p)}%`;$("#aiBar").value=Math.max(0,Math.min(1,p/100));$("#aiDetail").textContent=detail}
 function results(){const list=$("#autoList");$("#autoCount").textContent=`${autoEdits.length} visuais automáticos`;if(!autoEdits.length){list.innerHTML='<div class="empty big"><div class="emptyIcon">∿</div><b>Nenhum dado objetivo encontrado ainda.</b><small>O motor procura números, relações, distâncias, velocidades, temperaturas, tempos e quantidades na narração.</small></div>';return}list.innerHTML=autoEdits.map((e,i)=>`<article class="auto-item ${e.enabled===false?'off':''}"><button class="auto-toggle" data-i="${i}">${e.enabled===false?'○':'✓'}</button><div class="auto-icon">${ICON[e.type]}</div><div class="auto-main"><div class="auto-top"><b>${esc(e.title)}</b><span>${tm(e.start)} → ${tm(e.end)}</span></div><strong>${esc(e.data)}</strong><small>${esc(e.subtitle||e.text||"")}</small></div></article>`).join("");$$('.auto-toggle').forEach(b=>b.onclick=()=>{const e=autoEdits[+b.dataset.i];e.enabled=e.enabled===false;results();drawPreview()})}
-async function extractAudio(f,run){const {ALL_FORMATS,BlobSource,BufferTarget,Conversion,Input,Output,WavOutputFormat}=await loadMedia();const input=new Input({formats:ALL_FORMATS,source:new BlobSource(f,{maxCacheSize:16*1024*1024,useStreamReader:true})}),target=new BufferTarget(),output=new Output({format:new WavOutputFormat(),target}),conv=await Conversion.init({input,output,audio:{sampleRate:16000,numberOfChannels:1}});conv.onProgress=(p)=>{if(run===currentRun)status("Preparando o áudio",5+p*18,`Extraindo áudio • ${Math.round(p*100)}%`)};await conv.execute();const buf=output.target.buffer;if(!buf)throw Error("Não foi possível extrair o áudio do vídeo.");return new Blob([buf],{type:"audio/wav"})}
-async function model(run){if(transcriber)return transcriber;const {pipeline}=await loadAI();const webgpu=!!navigator.gpu,base={progress_callback:p=>{const q=Number.isFinite(p?.progress)?p.progress:0;status("Baixando modelo de transcrição",25+q*20,p?.file?String(p.file).split('/').pop():"Whisper local")}};try{transcriber=await pipeline("automatic-speech-recognition",MODEL,webgpu?{device:"webgpu",dtype:"q4",...base}:{dtype:"q8",...base});return transcriber}catch(e){if(webgpu){status("Modo compatível",25,"A aceleração gráfica não iniciou; tentando CPU no navegador.");transcriber=await pipeline("automatic-speech-recognition",MODEL,{dtype:"q8",...base});return transcriber}throw e}}
-async function analyze(){if(!file)return;const run=++currentRun;autoEdits=[];results();$("#analyzeBtn").disabled=true;$("#autoBadge").textContent="ANALISANDO";$("#transcript").textContent="Preparando narração…";try{const wav=await extractAudio(file,run);if(run!==currentRun)return;if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl=URL.createObjectURL(wav);const pipe=await model(run);status("Transcrevendo a narração",48,"Whisper está identificando a fala e seus tempos…");const out=await pipe(audioUrl,{language:"portuguese",task:"transcribe",return_timestamps:true,chunk_length_s:30,stride_length_s:5});if(run!==currentRun)return;$("#transcript").textContent=String(out?.text||"").trim()||"Narração sem texto detectável.";status("Extraindo fatos",78,"Convertendo frases objetivas em visualizações…");const found=[];for(const s of sentenceChunks(out?.chunks||[])){const c=claim(s.text);if(!c)continue;found.push({...c,id:crypto.randomUUID(),start:Math.max(0,s.start-.18),end:Math.min($("#video").duration||s.end,s.end+.32),text:s.text,enabled:true})}autoEdits=dedupe(found);status("Projeto automático pronto",100,`${autoEdits.length} visualizações criadas a partir da narração.`);results();drawPreview();toast(`${autoEdits.length} visualizações criadas automaticamente`)}catch(e){console.error(e);status("Não foi possível analisar",0,e?.message||"Erro de transcrição");$("#transcript").textContent="A análise automática falhou. Verifique se o vídeo possui áudio e tente novamente.";toast("Falha na análise automática")}finally{$("#analyzeBtn").disabled=false;$("#autoBadge").textContent="AUTOMÁTICO";if($("#video").duration){$("#test").disabled=false;$("#render").disabled=false}}}
+async function decodeAudio(f,run){
+  status("Preparando o áudio",5,"Lendo a faixa de áudio diretamente no navegador…");
+  const AC=window.AudioContext||window.webkitAudioContext;
+  if(!AC)throw Error("Seu navegador não oferece Web Audio API para analisar o áudio.");
+  const raw=await f.arrayBuffer();
+  let probe,decoded;
+  try{
+    probe=new AC();
+    decoded=await probe.decodeAudioData(raw.slice(0));
+  }catch(e){
+    throw Error("Não consegui decodificar o áudio deste vídeo. Tente MP4/H.264 com AAC ou escolha outro arquivo.");
+  }finally{try{await probe?.close()}catch{}}
+  if(run!==currentRun)return null;
+  const frames=Math.max(1,Math.ceil(decoded.duration*16000));
+  if(frames>16000*1800)throw Error("O vídeo tem mais de 30 minutos. Para a análise local, use clipes menores.");
+  status("Convertendo áudio",14,"Mono 16 kHz — formato ideal para o Whisper…");
+  const off=new OfflineAudioContext(1,frames,16000);
+  const mono=off.createBuffer(1,decoded.length,decoded.sampleRate);
+  const md=mono.getChannelData(0);
+  const n=decoded.numberOfChannels;
+  for(let c=0;c<n;c++){
+    const ch=decoded.getChannelData(c);
+    for(let i=0;i<ch.length;i++)md[i]+=ch[i]/n;
+  }
+  const src=off.createBufferSource();src.buffer=mono;src.connect(off.destination);src.start();
+  const rendered=await off.startRendering();
+  const data=rendered.getChannelData(0).slice();
+  let sum=0,peak=0;for(let i=0;i<data.length;i++){const v=data[i];sum+=v*v;if(Math.abs(v)>peak)peak=Math.abs(v)}
+  const rms=Math.sqrt(sum/Math.max(1,data.length));
+  if(peak<0.003||rms<0.0008)throw Error("O vídeo parece não ter uma faixa de voz audível. Verifique se a narração realmente está no arquivo.");
+  status("Áudio pronto",20,`${(decoded.duration/60).toFixed(1)} min • ${decoded.numberOfChannels} canais → 16 kHz mono`);
+  return {data,duration:decoded.duration};
+}
+async function model(run){
+  if(transcriber)return transcriber;
+  const {pipeline,env}=await loadAI();
+  env.allowLocalModels=false;env.allowRemoteModels=true;
+  const progress_callback=info=>{
+    if(run!==currentRun)return;
+    const p=Number.isFinite(info?.progress)?info.progress:0;
+    const fileName=String(info?.file||info?.name||"").split("/").pop();
+    const pct=Math.max(20,Math.min(78,20+p*.58));
+    status("Baixando modelo de transcrição",pct,fileName?`${fileName} • ${Math.round(p)}%`:"Preparando Whisper…");
+  };
+  const hasGpu=!!navigator.gpu;
+  async function attempt(device){
+    const opts=device==="webgpu"
+      ? {device:"webgpu",dtype:{encoder_model:"fp32",decoder_model_merged:"q4"},progress_callback}
+      : {device:"wasm",dtype:"q8",progress_callback};
+    return await pipeline("automatic-speech-recognition",MODEL,opts);
+  }
+  try{
+    if(hasGpu){
+      try{
+        const adapter=await navigator.gpu.requestAdapter();
+        if(adapter){
+          status("Preparando Whisper GPU",23,"Aceleração WebGPU disponível — testando o motor…");
+          try{transcriber=await attempt("webgpu");return transcriber}catch(e){console.warn("WebGPU Whisper failed",e)}
+        }
+      }catch(e){console.warn("WebGPU probe failed",e)}
+    }
+    status("Preparando Whisper CPU",23,"Usando modo compatível no navegador…");
+    transcriber=await attempt("wasm");
+    return transcriber;
+  }catch(e){
+    transcriber=null;
+    throw Error(`Não foi possível carregar o Whisper. ${e?.message||e}`);
+  }
+}
+async function analyze(){
+  if(!file)return;
+  const run=++currentRun;autoEdits=[];results();
+  $("#analyzeBtn").disabled=true;$("#autoBadge").textContent="ANALISANDO";$("#transcript").textContent="Preparando narração…";
+  try{
+    const audio=await decodeAudio(file,run);if(run!==currentRun||!audio)return;
+    const pipe=await model(run);if(run!==currentRun)return;
+    status("Transcrevendo a narração",32,"Whisper está entendendo a fala em português…");
+    const opts={language:"portuguese",task:"transcribe",return_timestamps:true,chunk_length_s:29,stride_length_s:5,do_sample:false};
+    let out;
+    try{out=await pipe(audio.data,opts)}catch(first){
+      console.warn("timestamped transcription failed",first);
+      status("Tentando transcrição compatível",40,"Ajustando o processamento de trechos…");
+      out=await pipe(audio.data,{language:"portuguese",task:"transcribe",return_timestamps:true,chunk_length_s:29,stride_length_s:4,do_sample:false});
+    }
+    if(run!==currentRun)return;
+    const full=String(out?.text||"").trim();
+    $("#transcript").textContent=full||"Nenhuma fala reconhecível foi encontrada.";
+    if(!full){throw Error("O Whisper terminou, mas não reconheceu fala. Confira o volume da narração.")}
+    status("Extraindo fatos",82,"Transformando números e relações em visualizações…");
+    const chunks=Array.isArray(out?.chunks)?out.chunks:[];
+    const found=[];
+    if(chunks.length){
+      for(const s of sentenceChunks(chunks)){
+        const c=claim(s.text);if(!c)continue;
+        found.push({...c,id:crypto.randomUUID(),start:Math.max(0,s.start-.18),end:Math.min($("#video").duration||s.end,s.end+.32),text:s.text,enabled:true})
+      }
+    }else{
+      const words=full.split(/\s+/).filter(Boolean);const total=$("#video").duration||audio.duration;const step=Math.max(1,total/Math.max(1,Math.ceil(words.length/10)));
+      for(let i=0;i<words.length;i+=10){const text=words.slice(i,i+10).join(" "),c=claim(text);if(c){const st=Math.min(total-.5,i/Math.max(1,words.length)*total);found.push({...c,id:crypto.randomUUID(),start:Math.max(0,st-.1),end:Math.min(total,st+step+.15),text,enabled:true})}}
+    }
+    autoEdits=dedupe(found);
+    status("Projeto automático pronto",100,`${autoEdits.length} visualizações criadas a partir da narração.`);
+    results();drawPreview();toast(`${autoEdits.length} visualizações criadas automaticamente`)
+  }catch(e){
+    console.error(e);status("Não foi possível analisar",0,e?.message||"Erro desconhecido");
+    $("#transcript").textContent=e?.message||"A análise automática falhou.";toast("Falha na análise automática")
+  }finally{
+    $("#analyzeBtn").disabled=false;$("#autoBadge").textContent="AUTOMÁTICO";
+    if($("#video").duration){$("#test").disabled=false;$("#render").disabled=false}
+  }
+}
 function setFile(f){if(!f)return;file=f;autoEdits=[];results();$("#transcript").textContent="Aguardando análise…";if(url)URL.revokeObjectURL(url);url=URL.createObjectURL(f);const v=$("#video");v.src=url;v.onloadedmetadata=()=>{$("#seek").max=v.duration||1;$("#test").disabled=false;$("#render").disabled=false;drawPreview();toast("Vídeo carregado • iniciando análise automática");setTimeout(analyze,300)};$("#stage").classList.remove("hide");$("#controls").classList.remove("hide");$("#fileInfo").classList.remove("hide");$("#fileInfo").innerHTML=`<b>${esc(f.name)}</b><span>${(f.size/1048576).toFixed(1)} MB</span>`}
 $("#file").onchange=e=>{setFile(e.target.files?.[0]);e.target.value=""};$("#drop").ondragover=e=>e.preventDefault();$("#drop").ondrop=e=>{e.preventDefault();setFile(e.dataTransfer.files?.[0])};$("#analyzeBtn").onclick=analyze;
 $("#video").ontimeupdate=()=>{$("#seek").value=$("#video").currentTime||0;$("#clock").textContent=`${tm($("#video").currentTime)} / ${tm($("#video").duration)}`;drawPreview()};$("#seek").oninput=()=>{$("#video").currentTime=+$("#seek").value;drawPreview()};$("#play").onclick=()=>{const v=$("#video");if(v.paused){v.play();$("#play").textContent="❚❚"}else{v.pause();$("#play").textContent="▶"}};
@@ -86,7 +194,7 @@ async function render(test){
       output=new Output({format:new Mp4OutputFormat(),target});
       conv=await Conversion.init({input,output,tracks:"primary",trim:{end},video:{...opts,hardwareAcceleration:"no-preference"}});
     }
-    conv.onProgress=p=>{
+    conv.onProgress=(p)=>{
       $("#bar").value=p;
       $("#ppct").textContent=`${Math.round(p*100)}%`;
     };
