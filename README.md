@@ -32,3 +32,7 @@ O processamento é local e pode consumir bastante RAM/CPU. Em celulares modestos
 O FFmpeg não é baixado na abertura nem na análise; ele só é carregado ao tocar em “Converter WebM → MP4”. Em celulares modestos, isso evita a espera inicial de vários minutos.
 
 Este MVP não inclui rastreamento facial MediaPipe/YOLO nem geração de ilustrações Lottie. A posição automática usa alternância inteligente entre esquerda/direita; isso deixa a base pronta para acrescentar rastreamento real na próxima versão.
+
+
+### Correção V4
+A seleção de WebGPU agora testa `navigator.gpu.requestAdapter()` e, se a GPU não estiver disponível ou falhar, o Whisper automaticamente usa WASM/CPU. Não é necessário ativar `--enable-unsafe-webgpu`.

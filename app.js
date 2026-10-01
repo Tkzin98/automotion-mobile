@@ -279,14 +279,44 @@ function audioBufferToWav(buffer){
   return new Blob([out],{type:'audio/wav'});
 }
 
+async function canUseWebGPU(){
+  try{
+    if(!navigator.gpu || typeof navigator.gpu.requestAdapter !== 'function') return false;
+    const adapter = await navigator.gpu.requestAdapter({powerPreference:'low-power'});
+    return !!adapter;
+  }catch(e){
+    console.warn('WebGPU indisponível; usando WASM/CPU.', e);
+    return false;
+  }
+}
+
 async function getWhisper(){
   if(whisperPipe) return whisperPipe;
   const mod = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/+esm');
   const {pipeline} = mod;
-  const useWebGPU = !!navigator.gpu;
+
+  // No celular, navigator.gpu pode existir mesmo quando o Chrome não consegue
+  // obter um adaptador. Por isso testamos requestAdapter() antes de selecionar WebGPU.
+  const webgpu = await canUseWebGPU();
+
+  if(webgpu){
+    try{
+      updateProgress(18, 'Preparando Whisper (GPU)…');
+      whisperPipe = await pipeline('automatic-speech-recognition','Xenova/whisper-tiny',{
+        dtype:'q4',
+        device:'webgpu'
+      });
+      return whisperPipe;
+    }catch(err){
+      console.warn('WebGPU falhou; fazendo fallback para WASM/CPU.', err);
+      whisperPipe = null;
+    }
+  }
+
+  updateProgress(18, 'Preparando Whisper (CPU)…');
   whisperPipe = await pipeline('automatic-speech-recognition','Xenova/whisper-tiny',{
     dtype:'q4',
-    device: useWebGPU ? 'webgpu' : 'wasm'
+    device:'wasm'
   });
   return whisperPipe;
 }
