@@ -1,213 +1,62 @@
 const MB_URL="https://esm.sh/mediabunny@1.61.0?bundle";
 const HF_URL="https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0/dist/transformers.web.js";
-let MB=null, HF=null;
-async function loadMedia(){if(MB)return MB;status("Carregando motor de mídia",8,"Preparando o renderizador no navegador…");MB=await import(MB_URL);return MB}
-async function loadAI(){if(HF)return HF;status("Preparando IA",22,"Carregando o motor Whisper no navegador…");HF=await import(HF_URL);HF.env.allowLocalModels=false;HF.env.allowRemoteModels=true;return HF}
-const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)],MODEL="onnx-community/whisper-base";
-let file=null,url=null,audioUrl=null,autoEdits=[],theme="cosmic",transcriber=null,currentRun=0;
-const ICON={comparison:"↔",scale:"◉",percentage:"%",distance:"⌁",speed:"➜",duration:"◷",timeline:"╱",count:"#",temperature:"°",fact:"✦"};
-const ENT=["sagitario a*","via lactea","andromeda","buraco negro","sistema solar","universo","supernova","nebulosa","estrela de neutrons","estrela","sol","jupiter","saturno","urano","netuno","marte","terra","venus","mercurio","lua","plutao","galaxia"];
+const MODELS=["onnx-community/whisper-small","onnx-community/whisper-base"];
+let MB=null,HF=null,transcriber=null,file=null,url=null,theme="cosmic",autoEdits=[],currentRun=0;
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-const norm=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();
+const norm=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[’']/g,"'").replace(/\s+/g," ").trim();
 const tm=s=>{s=Math.max(0,Number(s)||0);return `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`};
-const toast=t=>{const x=$("#toast");x.textContent=t;x.classList.add("show");clearTimeout(x._t);x._t=setTimeout(()=>x.classList.remove("show"),2500)};
+const toast=t=>{const x=$("#toast");x.textContent=t;x.classList.add("show");clearTimeout(x._t);x._t=setTimeout(()=>x.classList.remove("show"),2800)};
+const ICON={comparison:"↔",scale:"◉",percentage:"%",distance:"⌁",speed:"➜",duration:"◷",timeline:"╱",count:"#",temperature:"°",process:"✦"};
+
+async function loadMedia(){if(MB)return MB;status("Carregando motor de mídia",10,"Preparando o renderizador local…");MB=await import(MB_URL);return MB}
+async function loadAI(){if(HF)return HF;status("Preparando IA",24,"Carregando Transformers.js no navegador…");HF=await import(HF_URL);HF.env.allowLocalModels=false;HF.env.allowRemoteModels=true;return HF}
+function status(label,p=0,detail=""){$("#aiStatus").classList.remove("hide");$("#aiLabel").textContent=label;$("#aiPct").textContent=`${Math.round(p)}%`;$("#aiBar").value=Math.max(0,Math.min(1,p/100));$("#aiDetail").textContent=detail}
 function num(s){const t=norm(s),m=t.match(/-?\d+(?:[.,]\d+)?/);if(!m)return null;let n=parseFloat(m[0].replace(",","."));if(/bilh(?:ao|oes)/.test(t))n*=1e9;else if(/milh(?:ao|oes)/.test(t))n*=1e6;else if(/\bmil\b/.test(t))n*=1e3;return n}
 function showNum(n){if(!Number.isFinite(n))return"";if(Math.abs(n)>=1e9)return `${(n/1e9).toLocaleString("pt-BR",{maximumFractionDigits:2})} bi`;if(Math.abs(n)>=1e6)return `${(n/1e6).toLocaleString("pt-BR",{maximumFractionDigits:2})} mi`;if(Math.abs(n)>=1e3)return `${(n/1e3).toLocaleString("pt-BR",{maximumFractionDigits:2})} mil`;return n.toLocaleString("pt-BR",{maximumFractionDigits:2})}
-function entities(t){const n=norm(t),f=[];for(const e of ENT)if(n.includes(e)&&!f.includes(e))f.push(e);return f.map(x=>x.replace(/(^|\s)\S/g,c=>c.toUpperCase()))}
-function dur(s){if(s>=86400)return `${(s/86400).toLocaleString("pt-BR",{maximumFractionDigits:1})} dias`;if(s>=3600)return `${(s/3600).toLocaleString("pt-BR",{maximumFractionDigits:1})} h`;if(s>=60)return `${Math.floor(s/60)}m ${Math.round(s%60)}s`;return `${s.toLocaleString("pt-BR",{maximumFractionDigits:1})}s`}
-function sentenceChunks(chunks){const out=[];for(const c of chunks||[]){const text=String(c?.text||"").trim();if(!text)continue;const ts=c.timestamp||[0,0],st=Number(ts[0])||0,en=Number.isFinite(Number(ts[1]))?Number(ts[1]):st+6;const re=/[^.!?]+[.!?]?/g;let m;while((m=re.exec(text))){const raw=m[0].trim();if(!raw)continue;const a=Math.max(0,st+(m.index/text.length)*(en-st)),b=Math.min(en,st+((m.index+raw.length)/text.length)*(en-st));out.push({text:raw,start:a,end:Math.max(a+1.1,b)})}}return out}
-function claim(t){const raw=t.trim(),n=norm(raw),es=entities(raw);let m;
-m=n.match(/(-?\d+(?:[.,]\d+)?)\s*%/);if(m)return{type:"percentage",value:num(m[1]),title:"Percentual",data:`${num(m[1])}%`,subtitle:es[0]||"Proporção"};
-m=n.match(/(\d+(?:[.,]\d+)?)\s*vez(?:es)?\s*(?:maior|menor|o\s+tamanho|a\s+massa|mais|menos)?\s*(?:que|do que|da|de)?/);if(m){const v=num(m[1]),small=/menor|menos/.test(n.slice(m.index,m.index+m[0].length+10)),before=n.slice(0,m.index),after=n.slice(m.index+m[0].length),first=es[0]||entities(before)[0]||"Objeto",second=es[1]||entities(after)[0]||"Referência";return{type:"comparison",value:v,title:"Escala relativa",data:`${first}=${small?1:v};${second}=${small?v:1}`,subtitle:`${showNum(v)}×`}}
-m=n.match(/(-?\d+(?:[.,]\d+)?)\s*(?:km\/s|km\s*\/\s*s|quilometros por segundo|metros por segundo|m\/s)/);if(m)return{type:"speed",value:num(m[1]),title:"Velocidade",data:`${showNum(num(m[1]))} km/s`,subtitle:es[0]||"Movimento"};
-m=n.match(/(-?\d+(?:[.,]\d+)?)\s*(?:°\s*c|graus?\s*celsius|graus?)/);if(m&&(/temper|quente|frio|celsius/.test(n)))return{type:"temperature",value:num(m[1]),title:"Temperatura",data:`${num(m[1]).toLocaleString("pt-BR")} °C`,subtitle:es[0]||"Temperatura"};
-m=n.match(/(-?\d+(?:[.,]\d+)?)\s*(milhoes?|milhao|bilhoes?|bilhao|mil)?\s*(?:de\s*)?(km|quilometros|anos-luz|anos luz)/);if(m){const v=num(`${m[1]} ${m[2]||""}`),u=/ano/.test(m[3])?"anos-luz":"km";return{type:"distance",value:v,title:"Distância",data:`${showNum(v)} ${u}`,subtitle:es.slice(0,2).join(" → ")||"Distância"}}
-m=n.match(/leva(?:m)?\s+([\d.,]+)(?:\s*e\s*([\d.,]+))?\s*(segundos?|minutos?|horas?|dias?|anos?)/);if(m){const a=num(m[1])||0,b=m[2]?num(m[2]):0,u=norm(m[3]);const sec=a*(u.startsWith("ano")?31557600:u.startsWith("dia")?86400:u.startsWith("hora")?3600:u.startsWith("min")?60:1)+b;return{type:"duration",value:sec,title:"Tempo",data:dur(sec),subtitle:raw.slice(0,90)}}
-m=n.match(/ha\s+(-?\d+(?:[.,]\d+)?)\s*(milhoes?|milhao|bilhoes?|bilhao|mil)?\s*de\s*anos?/);if(m){const v=num(`${m[1]} ${m[2]||""}`);return{type:"timeline",value:v,title:"Escala de tempo",data:`Há ${showNum(v)} anos`,subtitle:es[0]||"Universo"}}
-m=n.match(/(?:tem|possui|cont(?:a|em)|cerca de|aproximadamente)\s+(\d+(?:[.,]\d+)?)\s*(milhoes?|milhao|bilhoes?|bilhao|mil)?\s*(luas?|planetas?|estrelas?|galaxias?|satelites?|objetos?)/);if(m){const v=num(`${m[1]} ${m[2]||""}`);return{type:"count",value:v,title:"Quantidade",data:`${showNum(v)} ${m[3]}`,subtitle:es[0]||"Quantidade"}}
-m=n.match(/(-?\d+(?:[.,]\d+)?)\s*(massas?\s+solares?)/);if(m){const v=num(m[1]);return{type:"comparison",value:v,title:"Massa relativa",data:`Sol=1;${es[0]||"Objeto"}=${v}`,subtitle:`${showNum(v)} massas solares`}}
-return null}
-function dedupe(xs){const o=[];for(const x of [...xs].sort((a,b)=>a.start-b.start)){const l=o[o.length-1];if(l&&norm(l.text)===norm(x.text))continue;if(l&&x.start<l.end+.45&&x.type!=="comparison"&&x.type!=="percentage")continue;o.push(x)}return o.slice(0,80)}
-function setTheme(t){theme=t;$$('.theme-card').forEach(b=>b.classList.toggle("on",b.dataset.theme===t));document.documentElement.dataset.theme=t;drawPreview()}$$('.theme-card').forEach(b=>b.onclick=()=>setTheme(b.dataset.theme));
-function status(label,p=0,detail=""){$("#aiStatus").classList.remove("hide");$("#aiLabel").textContent=label;$("#aiPct").textContent=`${Math.round(p)}%`;$("#aiBar").value=Math.max(0,Math.min(1,p/100));$("#aiDetail").textContent=detail}
-function results(){const list=$("#autoList");$("#autoCount").textContent=`${autoEdits.length} visuais automáticos`;if(!autoEdits.length){list.innerHTML='<div class="empty big"><div class="emptyIcon">∿</div><b>Nenhum dado objetivo encontrado ainda.</b><small>O motor procura números, relações, distâncias, velocidades, temperaturas, tempos e quantidades na narração.</small></div>';return}list.innerHTML=autoEdits.map((e,i)=>`<article class="auto-item ${e.enabled===false?'off':''}"><button class="auto-toggle" data-i="${i}">${e.enabled===false?'○':'✓'}</button><div class="auto-icon">${ICON[e.type]}</div><div class="auto-main"><div class="auto-top"><b>${esc(e.title)}</b><span>${tm(e.start)} → ${tm(e.end)}</span></div><strong>${esc(e.data)}</strong><small>${esc(e.subtitle||e.text||"")}</small></div></article>`).join("");$$('.auto-toggle').forEach(b=>b.onclick=()=>{const e=autoEdits[+b.dataset.i];e.enabled=e.enabled===false;results();drawPreview()})}
-async function decodeAudio(f,run){
-  status("Preparando o áudio",5,"Lendo a faixa de áudio diretamente no navegador…");
-  const AC=window.AudioContext||window.webkitAudioContext;
-  if(!AC)throw Error("Seu navegador não oferece Web Audio API para analisar o áudio.");
-  const raw=await f.arrayBuffer();
-  let probe,decoded;
-  try{
-    probe=new AC();
-    decoded=await probe.decodeAudioData(raw.slice(0));
-  }catch(e){
-    throw Error("Não consegui decodificar o áudio deste vídeo. Tente MP4/H.264 com AAC ou escolha outro arquivo.");
-  }finally{try{await probe?.close()}catch{}}
-  if(run!==currentRun)return null;
-  const frames=Math.max(1,Math.ceil(decoded.duration*16000));
-  if(frames>16000*1800)throw Error("O vídeo tem mais de 30 minutos. Para a análise local, use clipes menores.");
-  status("Convertendo áudio",14,"Mono 16 kHz — formato ideal para o Whisper…");
-  const off=new OfflineAudioContext(1,frames,16000);
-  const mono=off.createBuffer(1,decoded.length,decoded.sampleRate);
-  const md=mono.getChannelData(0);
-  const n=decoded.numberOfChannels;
-  for(let c=0;c<n;c++){
-    const ch=decoded.getChannelData(c);
-    for(let i=0;i<ch.length;i++)md[i]+=ch[i]/n;
-  }
-  const src=off.createBufferSource();src.buffer=mono;src.connect(off.destination);src.start();
-  const rendered=await off.startRendering();
-  const data=rendered.getChannelData(0).slice();
-  let sum=0,peak=0;for(let i=0;i<data.length;i++){const v=data[i];sum+=v*v;if(Math.abs(v)>peak)peak=Math.abs(v)}
-  const rms=Math.sqrt(sum/Math.max(1,data.length));
-  if(peak<0.003||rms<0.0008)throw Error("O vídeo parece não ter uma faixa de voz audível. Verifique se a narração realmente está no arquivo.");
-  status("Áudio pronto",20,`${(decoded.duration/60).toFixed(1)} min • ${decoded.numberOfChannels} canais → 16 kHz mono`);
-  return {data,duration:decoded.duration};
+function dur(s){if(s>=31557600)return `${(s/31557600).toLocaleString("pt-BR",{maximumFractionDigits:1})} anos`;if(s>=86400)return `${(s/86400).toLocaleString("pt-BR",{maximumFractionDigits:1})} dias`;if(s>=3600)return `${(s/3600).toLocaleString("pt-BR",{maximumFractionDigits:1})} h`;if(s>=60)return `${Math.floor(s/60)}m ${Math.round(s%60)}s`;return `${s.toLocaleString("pt-BR",{maximumFractionDigits:1})}s`}
+const ENT=[["sagitario a*","Sagittarius A*"],["via lactea","Via Láctea"],["andromeda","Andrômeda"],["buraco negro","Buraco negro"],["buraco de minhoca","Buraco de minhoca"],["sistema solar","Sistema Solar"],["universo","Universo"],["supernova","Supernova"],["nebulosa","Nebulosa"],["estrela de neutrons","Estrela de nêutrons"],["estrela","Estrela"],["sol","Sol"],["jupiter","Júpiter"],["saturno","Saturno"],["urano","Urano"],["netuno","Netuno"],["marte","Marte"],["terra","Terra"],["venus","Vênus"],["mercurio","Mercúrio"],["lua","Lua"],["plutao","Plutão"],["galaxia","Galáxia"],["planeta","Planeta"],["relatividade geral","Relatividade Geral"]];
+function entities(t){const n=norm(t),f=[];for(const [k,v] of ENT)if(n.includes(k)&&!f.includes(v))f.push(v);return f}
+const REPAIRS=[[/\bnathan\s+(hosem|hosen|rosen|hosenn)\b/gi,"Nathan Rosen"],[/\bburaco\s+de\s+(minha|minha\s+oca|minha\s+oca[hx]?|meu)\s*(?:ocah|ocá|oca)?\b/gi,"buraco de minhoca"],[/\brelatividade\s+geral\b/gi,"Relatividade Geral"],[/\bespaco\s*tempo\b/gi,"espaço-tempo"],[/\bg[aá]laxia\b/gi,"galáxia"],[/\bgas\s+e\s+poeira\b/gi,"gás e poeira"],[/\bmergulharam\s+(?:fungunas|em\s+fun(?:c|ç)[^ ]*?)\s+equa(?:coes|ções)\b/gi,"mergulharam nas equações"],[/\bfungunas\s+equa(?:coes|ções)\b/gi,"nas equações"],[/\bse\s+torn[ao]\s+dentro\b/gi,"se torna denso"],[/\bgrau\s+por\s+grau\b/gi,"grão por grão"],[/\bnasce\s+o\s+sol\b/gi,"nasce o Sol"]];
+function repairText(text){let out=String(text||"");for(const [re,val] of REPAIRS)out=out.replace(re,val);return out.replace(/\s+([,.!?;:])/g,"$1").replace(/([!?])\1+/g,"$1").trim()}
+function groupTimedChunks(out){const raw=Array.isArray(out?.chunks)?out.chunks:[];const words=raw.map(c=>{const ts=c?.timestamp||[null,null];return{text:String(c?.text||"").trim(),start:Number(ts[0]),end:Number(ts[1])}}).filter(x=>x.text&&Number.isFinite(x.start)&&Number.isFinite(x.end)&&x.end>=x.start);if(!words.length)return [];const likelyWords=words.length>3&&words.filter(w=>/^\S+$/.test(w.text)).length/words.length>.65;if(!likelyWords){const outS=[];for(const c of words){const re=/[^.!?]+[.!?]?/g;let m;while((m=re.exec(c.text))){const raw=m[0].trim();if(!raw)continue;const a=c.start+(m.index/Math.max(1,c.text.length))*(c.end-c.start),b=c.start+((m.index+raw.length)/Math.max(1,c.text.length))*(c.end-c.start);outS.push({text:raw,start:a,end:Math.max(a+.8,b),words:[{text:raw,start:a,end:Math.max(a+.8,b)}]})}}return outS}const sentences=[];let cur=[];const flush=()=>{if(!cur.length)return;sentences.push({text:cur.map(w=>w.text).join(" ").replace(/\s+([,.!?;:])/g,"$1").trim(),start:cur[0].start,end:cur[cur.length-1].end,words:cur.slice()});cur=[]};for(const w of words){cur.push(w);if(/[.!?]$/.test(w.text)||w.start-cur[cur.length-2]?.end>1.65)flush()}flush();return sentences}
+function charTime(sentence,charIndex){const ws=sentence.words||[];if(!ws.length)return sentence.start+(charIndex/Math.max(1,sentence.text.length))*(sentence.end-sentence.start);let pos=0;for(const w of ws){const next=pos+w.text.length;if(charIndex<=next)return w.start;pos=next+1}return sentence.end}
+function focus(sentence,needle){const t=norm(sentence.text),n=norm(needle),i=t.indexOf(n);if(i<0)return[sentence.start,sentence.end];return[charTime(sentence,i),charTime(sentence,i+n.length)]}
+function makeEdit(base,sentence,needle){const [a,b]=focus(sentence,needle);return {...base,start:Math.max(sentence.start,a-.12),end:Math.min(sentence.end+.45,b+.34),text:repairText(sentence.text),rawText:sentence.text,enabled:true,id:crypto.randomUUID()}}
+function claimForSentence(sentence,context=""){
+ const raw=repairText(sentence.text),n=norm(raw),es=entities(`${raw} ${context}`);let m;
+ m=n.match(/(\d+(?:[.,]\d+)?)\s*(?:%|por\s*cento)/);if(m)return makeEdit({type:"percentage",value:num(m[1]),title:"Proporção",data:`${num(m[1])}%`,subtitle:es[0]||"Percentual"},sentence,m[0]);
+ m=n.match(/(\d+(?:[.,]\d+)?)\s*vez(?:es)?\s+(?:a\s+)?(massa|tamanho|diametro|raio|volume|energia|peso)\s+(?:da|do|de)\s+([a-zà-ÿ* ]{2,28})/);if(m){const v=num(m[1]),ref=m[3].trim().replace(/[.,;!?]+$/g,"");const ent=es.length?es.slice(0,2):[ref||"Referência"];return makeEdit({type:m[2].startsWith("massa")?"comparison":"scale",value:v,title:m[2].startsWith("massa")?"Massa relativa":"Escala relativa",data:`${ent[0]||"Objeto"}=1;${ent[1]||ref}=${v}`,subtitle:`${showNum(v)}×`},sentence,m[0])}
+ m=n.match(/(\d+(?:[.,]\d+)?)\s*(massas?\s+solares?)/);if(m)return makeEdit({type:"comparison",value:num(m[1]),title:"Massa estelar",data:`Sol=1;${es[0]||"Objeto"}=${num(m[1])}`,subtitle:`${showNum(num(m[1]))} massas solares`},sentence,m[0]);
+ m=n.match(/(\d+(?:[.,]\d+)?)\s*(?:km\s*\/\s*s|km\/s|quilometros\s+por\s+segundo|metros\s+por\s+segundo)/);if(m)return makeEdit({type:"speed",value:num(m[1]),title:"Velocidade",data:`${showNum(num(m[1]))} km/s`,subtitle:es[0]||"Movimento"},sentence,m[0]);
+ m=n.match(/(-?\d+(?:[.,]\d+)?)\s*(?:°\s*c|graus?\s+celsius|graus?)/);if(m&&/(temper|quente|frio|celsius|superficie)/.test(n))return makeEdit({type:"temperature",value:num(m[1]),title:"Temperatura",data:`${num(m[1]).toLocaleString("pt-BR")} °C`,subtitle:es[0]||"Temperatura"},sentence,m[0]);
+ m=n.match(/(\d+(?:[.,]\d+)?)\s*(milhoes?|milhao|bilhoes?|bilhao|mil)?\s*(?:de\s*)?(km|quilometros|anos-luz|anos\s+luz|ua|unidades\s+astronomicas?)/);if(m){const v=num(`${m[1]} ${m[2]||""}`),u=/ano/.test(m[3])?"anos-luz":/ua|astronom/.test(m[3])?"UA":"km";return makeEdit({type:"distance",value:v,title:u==="anos-luz"?"Distância cósmica":"Distância",data:`${showNum(v)} ${u}`,subtitle:es.slice(0,2).join(" → ")||"Escala espacial"},sentence,m[0])}
+ m=n.match(/(?:leva|levam|demora|demoram)\s+(\d+(?:[.,]\d+)?)(?:\s*e\s*(\d+(?:[.,]\d+)?))?\s*(segundos?|minutos?|horas?|dias?|anos?)/);if(m){const a=num(m[1])||0,b=m[2]?num(m[2]):0,u=norm(m[3]);const sec=a*(u.startsWith("ano")?31557600:u.startsWith("dia")?86400:u.startsWith("hora")?3600:u.startsWith("min")?60:1)+b;return makeEdit({type:"duration",value:sec,title:"Tempo",data:dur(sec),subtitle:raw.slice(0,90)},sentence,m[0])}
+ m=n.match(/(?:ha|a|há)\s+(\d+(?:[.,]\d+)?)\s*(milhoes?|milhao|bilhoes?|bilhao|mil)?\s*de\s*anos?/);if(m){const v=num(`${m[1]} ${m[2]||""}`);return makeEdit({type:"timeline",value:v,title:"Escala temporal",data:`Há ${showNum(v)} anos`,subtitle:es[0]||"História cósmica"},sentence,m[0])}
+ m=n.match(/(?:tem|possui|conta\s+com|contam\s+com)\s+(\d+(?:[.,]\d+)?)\s*(milhoes?|milhao|bilhoes?|bilhao|mil)?\s*(luas?|planetas?|estrelas?|galaxias?|satelites?|satélites?|objetos?)/);if(m){const v=num(`${m[1]} ${m[2]||""}`);return makeEdit({type:"count",value:v,title:"Quantidade",data:`${showNum(v)} ${m[3]}`,subtitle:es[0]||"Quantidade"},sentence,m[0])}
+ const prs=[[/buraco\s+de\s+minhoca|dobra\s+no\s+proprio\s+espaco|conectar\s+.*?sem\s+atravessar/i,"wormhole","Buraco de minhoca","Geometria do espaço-tempo"],[/colaps|nuvem\s+molecular/i,"collapse","Colapso gravitacional","A matéria converge sob a gravidade"],[/disco\s+(?:giratorio|protoplanetario)|disco\s+de\s+poeira/i,"disk","Disco protoplanetário","Material em rotação ao redor da estrela"],[/orbita|girando|movimento\s+ao\s+redor/i,"orbit","Órbita","Movimento orbital"],[/nasce\s+o\s+sol|forma(?:m|ram)?\s+os\s+planetas|planetas\s+se\s+form/i,"formation","Formação","Evolução do sistema"],[/curvatura\s+do\s+(?:proprio\s+)?espaco|relatividade\s+geral/i,"spacetime","Espaço-tempo","A gravidade como geometria"]];
+ for(const [re,kind,title,subtitle] of prs)if(re.test(n))return makeEdit({type:"process",processKind:kind,title,data:title,subtitle},sentence,sentence.text);return null;
 }
-async function model(run){
-  if(transcriber)return transcriber;
-  const {pipeline,env}=await loadAI();
-  env.allowLocalModels=false;
-  env.allowRemoteModels=true;
-  env.backends={...(env.backends||{})};
-  const progress_callback=info=>{
-    if(run!==currentRun)return;
-    const p=Number.isFinite(info?.progress)?info.progress:0;
-    const fileName=String(info?.file||info?.name||"").split("/").pop();
-    const shown=Math.min(78,24+p*0.52);
-    status("Baixando modelo de transcrição",shown,fileName?`${fileName} • Whisper Base`:`Whisper Base • ${Math.round(p)}%`);
-  };
-  try{
-    status("Preparando Whisper Base",24,"Modelo multilíngue configurado para português…");
-    // WASM é o caminho estável para GitHub Pages; evitamos o import problemático
-    // onnxruntime-web/webgpu que algumas builds do Transformers.js tentam resolver.
-    transcriber=await pipeline("automatic-speech-recognition",MODEL,{
-      device:"wasm",
-      dtype:"q8",
-      progress_callback
-    });
-    return transcriber;
-  }catch(e){
-    transcriber=null;
-    throw Error(`Falha ao carregar o Whisper Base: ${e?.message||e}`);
-  }
-}
-async function analyze(){
-  if(!file)return;
-  const run=++currentRun;autoEdits=[];results();
-  $("#analyzeBtn").disabled=true;$("#autoBadge").textContent="ANALISANDO";$("#transcript").textContent="Preparando narração…";
-  try{
-    const audio=await decodeAudio(file,run);if(run!==currentRun||!audio)return;
-    const pipe=await model(run);if(run!==currentRun)return;
-    status("Transcrevendo a narração",32,"Whisper está entendendo a fala em português…");
-    const opts={language:"portuguese",task:"transcribe",return_timestamps:true,chunk_length_s:29,stride_length_s:5,do_sample:false,num_beams:1};
-    let out;
-    try{out=await pipe(audio.data,opts)}catch(first){
-      console.warn("timestamped transcription failed",first);
-      status("Tentando transcrição compatível",40,"Ajustando o processamento de trechos…");
-      out=await pipe(audio.data,{language:"portuguese",task:"transcribe",return_timestamps:true,chunk_length_s:29,stride_length_s:4,do_sample:false,num_beams:1});
-    }
-    if(run!==currentRun)return;
-    const full=String(out?.text||"").trim();
-    $("#transcript").textContent=full||"Nenhuma fala reconhecível foi encontrada.";
-    if(!full){throw Error("O Whisper terminou, mas não reconheceu fala. Confira o volume da narração.")}
-    status("Extraindo fatos",82,"Transformando números e relações em visualizações…");
-    const chunks=Array.isArray(out?.chunks)?out.chunks:[];
-    const found=[];
-    if(chunks.length){
-      for(const s of sentenceChunks(chunks)){
-        const c=claim(s.text);if(!c)continue;
-        found.push({...c,id:crypto.randomUUID(),start:Math.max(0,s.start-.18),end:Math.min($("#video").duration||s.end,s.end+.32),text:s.text,enabled:true})
-      }
-    }else{
-      const words=full.split(/\s+/).filter(Boolean);const total=$("#video").duration||audio.duration;const step=Math.max(1,total/Math.max(1,Math.ceil(words.length/10)));
-      for(let i=0;i<words.length;i+=10){const text=words.slice(i,i+10).join(" "),c=claim(text);if(c){const st=Math.min(total-.5,i/Math.max(1,words.length)*total);found.push({...c,id:crypto.randomUUID(),start:Math.max(0,st-.1),end:Math.min(total,st+step+.15),text,enabled:true})}}
-    }
-    autoEdits=dedupe(found);
-    status("Projeto automático pronto",100,`${autoEdits.length} visualizações criadas a partir da narração.`);
-    results();drawPreview();toast(`${autoEdits.length} visualizações criadas automaticamente`)
-  }catch(e){
-    console.error(e);status("Não foi possível analisar",0,e?.message||"Erro desconhecido");
-    $("#transcript").textContent=e?.message||"A análise automática falhou.";toast("Falha na análise automática")
-  }finally{
-    $("#analyzeBtn").disabled=false;$("#autoBadge").textContent="AUTOMÁTICO";
-    if($("#video").duration){$("#test").disabled=false;$("#render").disabled=false}
-  }
-}
-function setFile(f){if(!f)return;file=f;autoEdits=[];results();$("#transcript").textContent="Aguardando análise…";if(url)URL.revokeObjectURL(url);url=URL.createObjectURL(f);const v=$("#video");v.src=url;v.onloadedmetadata=()=>{$("#seek").max=v.duration||1;$("#test").disabled=false;$("#render").disabled=false;drawPreview();toast("Vídeo carregado • iniciando análise automática");setTimeout(analyze,300)};$("#stage").classList.remove("hide");$("#controls").classList.remove("hide");$("#fileInfo").classList.remove("hide");$("#fileInfo").innerHTML=`<b>${esc(f.name)}</b><span>${(f.size/1048576).toFixed(1)} MB</span>`}
-$("#file").onchange=e=>{setFile(e.target.files?.[0]);e.target.value=""};$("#drop").ondragover=e=>e.preventDefault();$("#drop").ondrop=e=>{e.preventDefault();setFile(e.dataTransfer.files?.[0])};$("#analyzeBtn").onclick=analyze;
-$("#video").ontimeupdate=()=>{$("#seek").value=$("#video").currentTime||0;$("#clock").textContent=`${tm($("#video").currentTime)} / ${tm($("#video").duration)}`;drawPreview()};$("#seek").oninput=()=>{$("#video").currentTime=+$("#seek").value;drawPreview()};$("#play").onclick=()=>{const v=$("#video");if(v.paused){v.play();$("#play").textContent="❚❚"}else{v.pause();$("#play").textContent="▶"}};
-function ctx(){const r=$("#stage").getBoundingClientRect(),c=$("#overlay"),d=Math.min(2.2,devicePixelRatio||1);c.width=Math.max(2,Math.floor(r.width*d));c.height=Math.max(2,Math.floor(r.height*d));const g=c.getContext("2d");g.setTransform(d,0,0,d,0,0);return[g,r.width,r.height]}
-function ease(p){return p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2}function box(g,x,y,w,h,r){g.beginPath();g.roundRect(x,y,w,h,r)}function pal(){return theme==="editorial"?{bg:"rgba(245,247,252,.94)",fg:"#0b101a",muted:"#657087",a:"#3645d8",b:"#7d57d9",grid:"rgba(13,18,30,.12)"}:theme==="aurora"?{bg:"rgba(7,15,24,.91)",fg:"#f2ffff",muted:"#9bb3c3",a:"#55e0ff",b:"#9b7cff",grid:"rgba(115,224,255,.15)"}:theme==="mono"?{bg:"rgba(9,11,14,.95)",fg:"#f7f7f5",muted:"#9da0a6",a:"#fff",b:"#8e949f",grid:"rgba(255,255,255,.13)"}:{bg:"rgba(8,12,22,.92)",fg:"#f7f9ff",muted:"#99a8bf",a:"#6fd4ff",b:"#9f81ff",grid:"rgba(130,160,255,.16)"}}
-function draw(g,e,t,w,h){if(e.enabled===false||t<e.start||t>e.end)return;const p=ease(Math.max(0,Math.min(1,(t-e.start)/Math.max(.08,e.end-e.start)))),al=Math.min(1,p/.16,(1-p)/.16),c=pal(),x=24,wide=Math.min(w-48,680);g.save();g.globalAlpha=al;g.shadowBlur=22;g.shadowColor=c.a;box(g,x,22,wide,96,20);g.fillStyle=c.bg;g.shadowBlur=0;g.fill();g.strokeStyle=c.grid;g.stroke();g.fillStyle=c.muted;g.font="700 10px system-ui";g.fillText(`${ICON[e.type]}  ${e.title.toUpperCase()}`,x+18,45);
-if(e.type==="comparison"||e.type==="scale"){const parts=String(e.data||"").split(";").map(z=>{const[a,b]=z.split("=");return{label:a||"",value:Number(b)||0}}).filter(q=>q.label),A=parts[0]||{label:"A",value:1},B=parts[1]||{label:"B",value:2},mx=Math.max(1,Math.abs(A.value),Math.abs(B.value));[A,B].forEach((d,i)=>{const yy=67+i*25,r=Math.max(.03,Math.abs(d.value)/mx)*p;g.fillStyle=c.muted;g.font="700 9px system-ui";g.fillText(d.label.slice(0,18),x+18,yy+3);g.fillStyle="rgba(255,255,255,.10)";g.fillRect(x+95,yy-5,wide-145,8);g.fillStyle=i?c.b:c.a;g.fillRect(x+95,yy-5,(wide-145)*r,8);g.fillStyle=c.fg;g.font="900 11px system-ui";g.fillText(showNum(d.value),x+wide-44,yy+3)})}
-else if(e.type==="percentage"){const pct=Math.max(0,Math.min(100,e.value||0))*p,cx=x+wide-63,cy=70,r=25;g.lineWidth=7;g.strokeStyle="rgba(255,255,255,.11)";g.beginPath();g.arc(cx,cy,r,0,7);g.stroke();g.strokeStyle=c.b;g.beginPath();g.arc(cx,cy,r,-Math.PI/2,-Math.PI/2+Math.PI*2*pct/100);g.stroke();g.fillStyle=c.fg;g.font="900 15px system-ui";g.textAlign="center";g.fillText(`${Math.round(pct)}%`,cx,75);g.textAlign="left";g.font="900 18px system-ui";g.fillText(e.subtitle||"Proporção",x+18,76)}
-else if(e.type==="distance"||e.type==="speed"){g.fillStyle=c.fg;g.font="900 22px system-ui";g.fillText(e.data||"",x+18,77);g.fillStyle=c.muted;g.font="600 9px system-ui";g.fillText(e.subtitle||"",x+18,95);g.strokeStyle=c.a;g.lineWidth=2;g.setLineDash([3,6]);g.beginPath();g.moveTo(x+230,78);g.lineTo(x+wide-22,78);g.stroke();g.setLineDash([]);g.fillStyle=c.a;g.beginPath();g.arc(x+wide-30,78,5,0,7);g.fill()}
-else if(e.type==="duration"||e.type==="timeline"){g.fillStyle=c.fg;g.font="900 22px system-ui";g.fillText(e.data||"",x+18,78);g.fillStyle=c.muted;g.font="600 9px system-ui";g.fillText(e.subtitle||"",x+18,96);g.strokeStyle=c.a;g.lineWidth=2;g.beginPath();g.moveTo(x+240,84);g.lineTo(x+wide-20,84);g.stroke();const dot=x+240+(wide-260)*p;g.fillStyle=c.b;g.beginPath();g.arc(dot,84,5+3*p,0,7);g.fill()}
-else if(e.type==="count"||e.type==="temperature"){g.fillStyle=c.fg;g.font="900 24px system-ui";g.fillText(e.data||"",x+18,80);g.fillStyle=c.muted;g.font="600 9px system-ui";g.fillText(e.subtitle||"",x+18,98)}
-else{g.fillStyle=c.fg;g.font="900 17px system-ui";g.fillText(e.data||e.subtitle||e.text||"",x+18,76)}g.restore()}
+function dedupe(xs){const out=[];for(const x of [...xs].sort((a,b)=>a.start-b.start)){const last=out[out.length-1];if(!last){out.push(x);continue}if(norm(last.text)===norm(x.text)&&x.type===last.type)continue;if(x.start<last.end-.15){if((x.end-x.start)>(last.end-last.start)+.25)out[out.length-1]=x;continue}out.push(x)}return out.slice(0,80)}
+
+async function decodeAudio(f,run){status("Preparando o áudio",6,"Lendo a faixa de áudio diretamente no navegador…");const AC=window.AudioContext||window.webkitAudioContext;if(!AC)throw Error("Seu navegador não oferece Web Audio API.");const raw=await f.arrayBuffer();let probe,decoded;try{probe=new AC();decoded=await probe.decodeAudioData(raw.slice(0))}catch(e){throw Error("Não consegui decodificar o áudio deste vídeo. Prefira MP4/H.264 com AAC.")}finally{try{await probe?.close()}catch{}}if(run!==currentRun)return null;const frames=Math.max(1,Math.ceil(decoded.duration*16000));if(frames>16000*1500)throw Error("Para análise local, use vídeos de até 25 minutos.");status("Limpando áudio",14,"Mono 16 kHz + normalização…");const off=new OfflineAudioContext(1,frames,16000),mono=off.createBuffer(1,decoded.length,decoded.sampleRate),md=mono.getChannelData(0),n=decoded.numberOfChannels;for(let c=0;c<n;c++){const ch=decoded.getChannelData(c);for(let i=0;i<ch.length;i++)md[i]+=ch[i]/n}let sum=0,peak=0;for(const v of md){sum+=v*v;peak=Math.max(peak,Math.abs(v))}const rms=Math.sqrt(sum/Math.max(1,md.length));if(peak<.002||rms<.0005)throw Error("A faixa de voz parece silenciosa. Verifique a narração.");const gain=Math.min(4,.075/Math.max(rms,.001));for(let i=0;i<md.length;i++)md[i]=Math.max(-1,Math.min(1,md[i]*gain));const src=off.createBufferSource();src.buffer=mono;src.connect(off.destination);src.start();const rendered=await off.startRendering();status("Áudio pronto",20,`${(decoded.duration/60).toFixed(1)} min • ${decoded.numberOfChannels} canais → 16 kHz mono`);return{data:rendered.getChannelData(0).slice(),duration:decoded.duration}}
+async function getModel(run){if(transcriber)return transcriber;const {pipeline,env}=await loadAI();env.allowLocalModels=false;env.allowRemoteModels=true;const progress_callback=info=>{if(run!==currentRun)return;const p=Number(info?.progress)||0;const name=String(info?.file||info?.name||"").split("/").pop();status("Baixando modelo de transcrição",20+p*.42,name?`${name} • Whisper`:`Whisper • ${Math.round(p)}%`)};let lastErr=null;for(const modelId of MODELS){try{status("Preparando reconhecimento",22,modelId.endsWith("small")?"Modo profissional • Whisper Small":"Fallback • Whisper Base");transcriber=await pipeline("automatic-speech-recognition",modelId,{device:"wasm",dtype:"q8",progress_callback});return transcriber}catch(e){lastErr=e;transcriber=null;console.warn("Modelo falhou",modelId,e)}}throw Error(`Não foi possível carregar o Whisper. ${lastErr?.message||"Verifique a internet."}`)}
+async function transcribe(pipe,audio){const opts={language:"portuguese",task:"transcribe",return_timestamps:"word",chunk_length_s:30,stride_length_s:5,do_sample:false,num_beams:2,force_full_sequences:true};try{return await pipe(audio.data,opts)}catch(e){console.warn(e);return await pipe(audio.data,{language:"portuguese",task:"transcribe",return_timestamps:true,chunk_length_s:30,stride_length_s:5,do_sample:false})}}
+async function analyze(){if(!file)return;const run=++currentRun;autoEdits=[];renderList();$("#analyzeBtn").disabled=true;$("#autoBadge").textContent="ANALISANDO";$("#transcript").textContent="Preparando narração…";try{const audio=await decodeAudio(file,run);if(!audio||run!==currentRun)return;const pipe=await getModel(run);if(run!==currentRun)return;status("Transcrevendo a narração",48,"Whisper Small • português • timestamps por palavra…");const out=await transcribe(pipe,audio);if(run!==currentRun)return;const rawText=String(out?.text||"").trim(),clean=repairText(rawText);$("#transcript").textContent=clean||"Nenhuma fala reconhecível foi encontrada.";$("#rawTranscript").textContent=rawText||"—";if(!clean)throw Error("O Whisper terminou, mas não reconheceu fala. Verifique o volume da narração.");status("Entendendo o conteúdo",82,"Separando fatos objetivos e processos científicos…");const sentences=groupTimedChunks(out),found=[];for(let i=0;i<sentences.length;i++){const e=claimForSentence(sentences[i],[sentences[i-1]?.text,sentences[i+1]?.text].filter(Boolean).join(" "));if(e)found.push(e)}autoEdits=dedupe(found);status("Motion sincronizado",100,`${autoEdits.length} visualizações escolhidas automaticamente.`);renderList();drawPreview();toast(autoEdits.length?`${autoEdits.length} visuais sincronizados com a narração`:"A narração foi transcrita, mas nenhum fato/processo visualizável foi encontrado.")}catch(e){console.error(e);status("Não foi possível analisar",0,e?.message||"Erro desconhecido");$("#transcript").textContent=e?.message||"A análise automática falhou.";toast("Falha na análise")}finally{$("#analyzeBtn").disabled=false;$("#autoBadge").textContent="AUTOMÁTICO";if($("#video").duration){$("#test").disabled=false;$("#render").disabled=false}}}
+function renderList(){const list=$("#autoList");$("#autoCount").textContent=`${autoEdits.length} visuais automáticos`;if(!autoEdits.length){list.innerHTML='<div class="empty big"><div class="emptyIcon">∿</div><b>Nenhum visual pronto ainda.</b><small>O AutoMotion transforma relações, medidas e processos da narração em Motion sincronizado.</small></div>';return}list.innerHTML=autoEdits.map((e,i)=>`<article class="auto-item ${e.enabled===false?'off':''}"><button class="auto-toggle" data-i="${i}">${e.enabled===false?'○':'✓'}</button><div class="auto-icon">${ICON[e.type]}</div><div class="auto-main"><div class="auto-top"><b>${esc(e.title)}</b><span>${tm(e.start)} → ${tm(e.end)}</span></div><strong>${esc(e.data||e.subtitle||"")}</strong><small>${esc(e.subtitle||e.text||"")}</small></div></article>`).join("");$$('.auto-toggle').forEach(b=>b.onclick=()=>{const e=autoEdits[+b.dataset.i];e.enabled=e.enabled===false;renderList();drawPreview()})}
+function setFile(f){if(!f)return;file=f;autoEdits=[];renderList();$("#transcript").textContent="Aguardando análise automática…";$("#rawTranscript").textContent="—";if(url)URL.revokeObjectURL(url);url=URL.createObjectURL(f);const v=$("#video");v.src=url;v.onloadedmetadata=()=>{$("#seek").max=v.duration||1;$("#stage").classList.remove("hide");$("#controls").classList.remove("hide");$("#fileInfo").classList.remove("hide");$("#fileInfo").innerHTML=`<b>${esc(f.name)}</b><span>${(f.size/1048576).toFixed(1)} MB</span>`;$("#test").disabled=false;$("#render").disabled=false;drawPreview();setTimeout(analyze,250)};$("#stage").classList.remove("hide");$("#controls").classList.remove("hide");toast("Vídeo carregado • análise automática iniciada")}
+$("#file").onchange=e=>setFile(e.target.files?.[0]);$("#analyzeBtn").onclick=analyze;$("#drop").onclick=e=>{if(e.target.id!=="file")$("#file").click()};$("#drop").ondragover=e=>e.preventDefault();$("#drop").ondrop=e=>{e.preventDefault();setFile(e.dataTransfer.files?.[0])};
+$("#video").ontimeupdate=()=>{$("#seek").value=$("#video").currentTime||0;$("#clock").textContent=`${tm($("#video").currentTime)} / ${tm($("#video").duration)}`;drawPreview()};$("#seek").oninput=()=>{$("#video").currentTime=+$("#seek").value;drawPreview()};$("#play").onclick=()=>{const v=$("#video");if(v.paused){v.play();$("#play").textContent="❚❚"}else{v.pause();$("#play").textContent="▶"}};$$('.theme-card').forEach(b=>b.onclick=()=>{theme=b.dataset.theme;$$('.theme-card').forEach(x=>x.classList.toggle('on',x.dataset.theme===theme));document.documentElement.dataset.theme=theme;drawPreview()});$("#help").onclick=()=>$("#modal").classList.remove("hide");$("#close").onclick=()=>$("#modal").classList.add("hide");
+function pal(){return theme==="editorial"?{bg:"rgba(245,247,252,.95)",fg:"#0b101a",muted:"#657087",a:"#3645d8",b:"#7d57d9",grid:"rgba(13,18,30,.12)"}:theme==="aurora"?{bg:"rgba(7,15,24,.93)",fg:"#f2ffff",muted:"#9bb3c3",a:"#55e0ff",b:"#9b7cff",grid:"rgba(115,224,255,.15)"}:theme==="mono"?{bg:"rgba(9,11,14,.96)",fg:"#f7f7f5",muted:"#9da0a6",a:"#fff",b:"#8e949f",grid:"rgba(255,255,255,.13)"}:{bg:"rgba(8,12,22,.94)",fg:"#f7f9ff",muted:"#99a8bf",a:"#6fd4ff",b:"#9f81ff",grid:"rgba(130,160,255,.16)"}}
+function ease(p){return p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2}function box(g,x,y,w,h,r){g.beginPath();if(g.roundRect)g.roundRect(x,y,w,h,r);else g.rect(x,y,w,h)}function ctx(){const r=$("#stage").getBoundingClientRect(),c=$("#overlay"),d=Math.min(2.2,devicePixelRatio||1);c.width=Math.max(2,Math.floor(r.width*d));c.height=Math.max(2,Math.floor(r.height*d));const g=c.getContext("2d");g.setTransform(d,0,0,d,0,0);return[g,r.width,r.height]}function drawProcess(g,e,p,x,y,wide,c){const cx=x+wide-82,cy=y+70;g.fillStyle=c.fg;g.font="900 20px system-ui";g.fillText(e.data||e.title,x+18,y+70);g.fillStyle=c.muted;g.font="600 9px system-ui";g.fillText(e.subtitle||"",x+18,y+90);g.save();g.translate(cx,cy);g.strokeStyle=c.grid;g.lineWidth=2;if(e.processKind==="collapse"){g.beginPath();g.arc(0,0,29,0,7);g.stroke();for(let i=0;i<8;i++){const a=i*Math.PI/4,r=52-22*p;g.fillStyle=i%2?c.b:c.a;g.beginPath();g.arc(Math.cos(a)*r,Math.sin(a)*r,4,0,7);g.fill();g.beginPath();g.moveTo(Math.cos(a)*r,Math.sin(a)*r);g.lineTo(0,0);g.stroke()}}else if(e.processKind==="orbit"||e.processKind==="disk"){g.beginPath();g.ellipse(0,0,48,18,-.3,0,7);g.stroke();g.fillStyle=c.b;g.beginPath();g.arc(0,0,10,0,7);g.fill();const a=p*Math.PI*2;g.fillStyle=c.a;g.beginPath();g.arc(Math.cos(a)*48,Math.sin(a)*18,5,0,7);g.fill()}else if(e.processKind==="wormhole"){g.beginPath();g.ellipse(0,0,36,24,0,0,7);g.stroke();g.globalAlpha=.35;g.beginPath();g.ellipse(0,0,18,12,0,0,7);g.stroke();g.globalAlpha=1;g.fillStyle=c.a;g.beginPath();g.arc(-48,0,4,0,7);g.arc(48,0,4,0,7);g.fill()}else if(e.processKind==="spacetime"){for(let i=-2;i<=2;i++){g.beginPath();g.moveTo(-50,i*18);g.quadraticCurveTo(0,i*18+(i===0?18:8)*p,50,i*18);g.stroke()}g.beginPath();g.arc(0,18,15,0,7);g.stroke()}else{g.fillStyle=c.b;g.shadowBlur=18;g.shadowColor=c.b;g.beginPath();g.arc(0,0,14+18*p,0,7);g.fill();g.shadowBlur=0;g.strokeStyle=c.a;g.beginPath();g.arc(0,0,34,0,7);g.stroke()}g.restore()}
+function draw(g,e,t,w,h){if(e.enabled===false||t<e.start||t>e.end)return;const p=ease(Math.max(0,Math.min(1,(t-e.start)/Math.max(.08,e.end-e.start)))),fade=Math.min(1,p/.14,(1-p)/.14),c=pal(),wide=Math.min(w-32,670),high=e.type==="process"?126:112,x=(w-wide)/2,y=Math.max(14,h-high-22);g.save();g.globalAlpha=fade;g.shadowBlur=26;g.shadowColor=c.a;box(g,x,y,wide,high,20);g.fillStyle=c.bg;g.fill();g.shadowBlur=0;g.strokeStyle=c.grid;g.stroke();g.fillStyle=c.muted;g.font="800 9px system-ui";g.fillText(`${ICON[e.type]}  ${String(e.title||"MOTION").toUpperCase()}`,x+18,y+24);
+ if(e.type==="comparison"||e.type==="scale"){const parts=String(e.data||"").split(";").map(z=>{const[a,b]=z.split("=");return{label:a||"Objeto",value:Number(b)||0}}).filter(q=>q.label),A=parts[0]||{label:"A",value:1},B=parts[1]||{label:"B",value:2},mx=Math.max(1,Math.abs(A.value),Math.abs(B.value));[A,B].forEach((d,i)=>{const yy=y+55+i*28,ratio=Math.max(.035,Math.abs(d.value)/mx)*p;g.fillStyle=c.muted;g.font="700 9px system-ui";g.fillText(String(d.label).slice(0,18),x+18,yy+3);g.fillStyle=c.grid;g.fillRect(x+112,yy-7,wide-165,10);g.fillStyle=i?c.b:c.a;g.fillRect(x+112,yy-7,(wide-165)*ratio,10);g.fillStyle=c.fg;g.font="900 11px system-ui";g.textAlign="right";g.fillText(showNum(d.value),x+wide-22,yy+3);g.textAlign="left"})}
+ else if(e.type==="percentage"){const pct=Math.max(0,Math.min(100,e.value||0))*p,cx=x+wide-72,cy=y+63,r=30;g.lineWidth=7;g.strokeStyle=c.grid;g.beginPath();g.arc(cx,cy,r,0,7);g.stroke();g.strokeStyle=c.b;g.beginPath();g.arc(cx,cy,r,-Math.PI/2,-Math.PI/2+Math.PI*2*pct/100);g.stroke();g.fillStyle=c.fg;g.font="900 15px system-ui";g.textAlign="center";g.fillText(`${Math.round(pct)}%`,cx,cy+5);g.textAlign="left";g.font="900 22px system-ui";g.fillText(e.subtitle||"Proporção",x+18,y+70)}
+ else if(e.type==="distance"||e.type==="speed"){g.fillStyle=c.fg;g.font="900 24px system-ui";g.fillText(e.data||"",x+18,y+68);g.fillStyle=c.muted;g.font="600 9px system-ui";g.fillText(e.subtitle||"",x+18,y+88);g.strokeStyle=c.a;g.lineWidth=2;g.beginPath();g.moveTo(x+235,y+70);g.lineTo(x+wide-26,y+70);g.stroke();const xx=x+235+(wide-262)*p;g.fillStyle=c.b;g.shadowBlur=12;g.shadowColor=c.b;g.beginPath();g.arc(xx,y+70,7,0,7);g.fill();g.shadowBlur=0}
+ else if(e.type==="duration"){const cx=x+wide-70,cy=y+61,r=30;g.lineWidth=7;g.strokeStyle=c.grid;g.beginPath();g.arc(cx,cy,r,0,7);g.stroke();g.strokeStyle=c.a;g.beginPath();g.arc(cx,cy,r,-Math.PI/2,-Math.PI/2+Math.PI*2*p);g.stroke();g.fillStyle=c.fg;g.font="900 21px system-ui";g.fillText(e.data||"",x+18,y+70);g.fillStyle=c.muted;g.font="600 9px system-ui";g.fillText(e.subtitle||"Tempo",x+18,y+89)}
+ else if(e.type==="timeline"){g.fillStyle=c.fg;g.font="900 24px system-ui";g.fillText(e.data||"",x+18,y+69);g.fillStyle=c.muted;g.font="600 9px system-ui";g.fillText(e.subtitle||"História cósmica",x+18,y+89);g.strokeStyle=c.a;g.lineWidth=2;g.beginPath();g.moveTo(x+18,y+101);g.lineTo(x+wide-22,y+101);g.stroke();const dot=x+18+(wide-40)*p;g.fillStyle=c.b;g.beginPath();g.arc(dot,y+101,6,0,7);g.fill()}
+ else if(e.type==="count"||e.type==="temperature"){g.fillStyle=c.fg;g.font="900 26px system-ui";g.fillText(e.data||"",x+18,y+70);g.fillStyle=c.muted;g.font="600 9px system-ui";g.fillText(e.subtitle||"",x+18,y+89);if(e.type==="temperature"){g.strokeStyle=c.grid;g.lineWidth=8;g.beginPath();g.moveTo(x+250,y+70);g.lineTo(x+wide-25,y+70);g.stroke();g.strokeStyle=c.a;g.beginPath();g.moveTo(x+250,y+70);g.lineTo(x+250+(wide-275)*Math.min(1,Math.max(0,(e.value+273)/900))*p,y+70);g.stroke()}}
+ else if(e.type==="process")drawProcess(g,e,p,x,y,wide,c);g.restore()}
 function drawPreview(){if(!file||$("#stage").classList.contains("hide"))return;const[g,w,h]=ctx();g.clearRect(0,0,w,h);autoEdits.forEach(e=>draw(g,e,$("#video").currentTime||0,w,h))}addEventListener("resize",drawPreview);
-async function render(test){
-  if(!file||!autoEdits.some(e=>e.enabled!==false)){toast("Nenhuma visualização ativa para renderizar");return}
-  if(!("VideoEncoder" in window)){toast("WebCodecs não está disponível neste navegador");return}
-  $("#render").disabled=true;
-  $("#test").disabled=true;
-  $("#progress").classList.remove("hide");
-  try{
-    const {ALL_FORMATS,BlobSource,BufferTarget,Conversion,Input,Mp4OutputFormat,Output,Quality}=await loadMedia();
-    const input=new Input({formats:ALL_FORMATS,source:new BlobSource(file,{maxCacheSize:16*1024*1024,useStreamReader:true})});
-    const duration=await input.computeDuration();
-    const end=test?Math.min(10,duration):duration;
-    let target=new BufferTarget();
-    let output=new Output({format:new Mp4OutputFormat(),target});
-    let cc=null;
-    const opts={
-      codec:"avc",
-      quality:new Quality("medium"),
-      hardwareAcceleration:"prefer-hardware",
-      forceTranscode:true,
-      process:s=>{
-        if(!cc){
-          const can=new OffscreenCanvas(s.displayWidth,s.displayHeight);
-          cc=can.getContext("2d");
-        }
-        cc.clearRect(0,0,cc.canvas.width,cc.canvas.height);
-        s.draw(cc,0,0);
-        autoEdits.forEach(e=>draw(cc,e,s.timestamp,cc.canvas.width,cc.canvas.height));
-        return cc.canvas;
-      }
-    };
-    let conv;
-    try{
-      conv=await Conversion.init({input,output,tracks:"primary",trim:{end},video:opts});
-      if(!conv.isValid)throw Error("Conversão inválida");
-    }catch(first){
-      target=new BufferTarget();
-      output=new Output({format:new Mp4OutputFormat(),target});
-      conv=await Conversion.init({input,output,tracks:"primary",trim:{end},video:{...opts,hardwareAcceleration:"no-preference"}});
-    }
-    conv.onProgress=(p)=>{
-      $("#bar").value=p;
-      $("#ppct").textContent=`${Math.round(p*100)}%`;
-    };
-    await conv.execute();
-    const buf=output.target.buffer;
-    if(!buf)throw Error("Arquivo final não foi gerado");
-    const href=URL.createObjectURL(new Blob([buf],{type:"video/mp4"}));
-    $("#result").classList.remove("hide");
-    $("#result").innerHTML=`<div class="success"><b>✓ Render concluído</b><a href="${href}" download="AutoMotion_${test?"teste_10s":"final"}.mp4">⬇️ Salvar MP4</a></div>`;
-    toast("Render concluído");
-  }catch(e){
-    console.error(e);
-    status("Falha na renderização",0,e?.message||"Erro desconhecido");
-    toast("Falha ao renderizar");
-  }finally{
-    $("#render").disabled=false;
-    $("#test").disabled=false;
-  }
-}
-$("#render").onclick=()=>render(false);$("#test").onclick=()=>render(true);$("#help").onclick=()=>$("#modal").classList.remove("hide");$("#close").onclick=()=>$("#modal").classList.add("hide");results();setTheme("cosmic");
-
-
-// Atualiza o Service Worker sem bloquear o editor.
-// Service Worker disabled in V12.2 to prevent stale editor code from being served on GitHub Pages.
+async function render(test){if(!file||!autoEdits.some(e=>e.enabled!==false)){toast("Nenhuma visualização ativa para renderizar");return}if(!("VideoEncoder"in window)){toast("WebCodecs não está disponível neste navegador");return}$("#render").disabled=true;$("#test").disabled=true;$("#progress").classList.remove("hide");try{const {ALL_FORMATS,BlobSource,BufferTarget,Conversion,Input,Mp4OutputFormat,Output,Quality}=await loadMedia(),input=new Input({formats:ALL_FORMATS,source:new BlobSource(file,{maxCacheSize:16*1024*1024,useStreamReader:true})}),duration=await input.computeDuration(),end=test?Math.min(10,duration):duration;let target=new BufferTarget(),output=new Output({format:new Mp4OutputFormat(),target}),cc=null;const opts={codec:"avc",quality:new Quality("medium"),hardwareAcceleration:"prefer-hardware",forceTranscode:true,process:s=>{if(!cc){const can=new OffscreenCanvas(s.displayWidth,s.displayHeight);cc=can.getContext("2d")}cc.clearRect(0,0,cc.canvas.width,cc.canvas.height);s.draw(cc,0,0);autoEdits.forEach(e=>draw(cc,e,s.timestamp,cc.canvas.width,cc.canvas.height));return cc.canvas}};let conv;try{conv=await Conversion.init({input,output,tracks:"primary",trim:{end},video:opts});if(!conv.isValid)throw Error("Conversão inválida")}catch(first){target=new BufferTarget();output=new Output({format:new Mp4OutputFormat(),target});conv=await Conversion.init({input,output,tracks:"primary",trim:{end},video:{...opts,hardwareAcceleration:"no-preference"}})}conv.onProgress=p=>{$("#bar").value=p;$("#ppct").textContent=`${Math.round(p*100)}%`};await conv.execute();const buf=output.target.buffer;if(!buf)throw Error("Arquivo final não foi gerado");const href=URL.createObjectURL(new Blob([buf],{type:"video/mp4"}));$("#result").classList.remove("hide");$("#result").innerHTML=`<div class="success"><b>✓ Render concluído</b><a href="${href}" download="AutoMotion_${test?"teste_10s":"final"}.mp4">⬇️ Salvar MP4</a></div>`;toast("Render concluído")}catch(e){console.error(e);status("Falha na renderização",0,e?.message||"Erro desconhecido");toast("Falha ao renderizar")}finally{$("#render").disabled=false;$("#test").disabled=false}}
+$("#render").onclick=()=>render(false);$("#test").onclick=()=>render(true);renderList();

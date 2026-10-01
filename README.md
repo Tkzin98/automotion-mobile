@@ -1,8 +1,7 @@
-# AutoMotion Studio V13.0
+# AutoMotion Studio V14
 
-Correção do progresso do Mediabunny: `Conversion.onProgress` é configurado como propriedade antes de `execute()`.
+Editor automático para vídeos científicos, astronomia e documentários.
 
-Abra no GitHub Pages com `?v=12.5` após publicar.
+Fluxo: vídeo → áudio → Whisper Small (fallback Base) → correção linguística de alta evidência → fatos/processos → Motion sincronizado → MP4 local.
 
-
-V13 replaces the Mediabunny audio-to-WAV analysis path with Web Audio API decoding and a robust Transformers.js Whisper pipeline. Rendering remains local with Mediabunny + WebCodecs.
+A transcrição original do Whisper fica disponível no bloco recolhível para auditoria. Números não são alterados pela camada de correção linguística.
