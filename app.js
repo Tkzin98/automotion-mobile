@@ -1,5 +1,6 @@
 const $=id=>document.getElementById(id);
 const videoInput=$('videoInput'),sourceVideo=$('sourceVideo'),renderCanvas=$('renderCanvas'),playCanvas=$('playCanvas');
+const colabBtn=$('colabBtn'),downloadProject=$('downloadProject');
 const analyzeBtn=$('analyzeBtn'),exportBtn=$('exportBtn'),previewBtn=$('previewBtn'),mp4Btn=$('mp4Btn'),cancelExportBtn=$('cancelExportBtn');
 const downloadWebm=$('downloadWebm'),downloadMp4=$('downloadMp4'),statusPill=$('statusPill'),progressArea=$('progressArea'),progressBar=$('progressBar'),progressLabel=$('progressLabel'),progressValue=$('progressValue');
 const resultCard=$('resultCard'),segmentList=$('segmentList'),segmentCount=$('segmentCount'),claimTag=$('claimTag'),claimSummary=$('claimSummary'),videoMeta=$('videoMeta'),stageHint=$('stageHint'),styleSelect=$('styleSelect'),positionSelect=$('positionSelect');
@@ -42,6 +43,7 @@ previewBtn.addEventListener('click',previewResult);
 exportBtn.addEventListener('click',exportWebM);
 cancelExportBtn.addEventListener('click',()=>{cancelRequested=true;setStatus('Parando renderização…');});
 mp4Btn.addEventListener('click',convertMp4);
+colabBtn.addEventListener('click',exportColabProject);
 styleSelect.addEventListener('change',()=>{cachedThemeKey='';drawCurrentFrame()});
 positionSelect.addEventListener('change',()=>drawCurrentFrame());
 
@@ -170,6 +172,57 @@ function drawViz(c,x,y,w,h,s,th,p){
   }else{const len=Math.min(w-16,w*.65*p);c.fillStyle='rgba(255,255,255,.11)';c.fillRect(x+8,ly-5,w-16,10);c.fillStyle=th.accent;c.fillRect(x+8,ly-5,len,10)}
 }
 
+
+function makeProject(){
+  if(!currentVideoFile) throw new Error('Escolha um vídeo primeiro.');
+  if(!claimSegments.length) throw new Error('Analise o vídeo antes de exportar o projeto.');
+  return {
+    schema_version: 1,
+    automotion_version: 'V9',
+    created_at: new Date().toISOString(),
+    video: {
+      name: currentVideoFile.name,
+      size_bytes: currentVideoFile.size,
+      width: sourceVideo.videoWidth || null,
+      height: sourceVideo.videoHeight || null,
+      duration_seconds: Number.isFinite(sourceVideo.duration) ? sourceVideo.duration : null
+    },
+    render: {
+      fps: 30,
+      width: sourceVideo.videoWidth || 1280,
+      height: sourceVideo.videoHeight || 720,
+      style: styleSelect.value,
+      position: positionSelect.value,
+      codec: 'libx264',
+      preset: 'veryfast',
+      crf: 20,
+      audio_codec: 'aac',
+      audio_bitrate: '160k'
+    },
+    claims: claimSegments.filter(s=>s.enabled).map(s=>({
+      id:s.id, start:Number(s.start), end:Number(s.end), type:s.type, value:s.value, unit:s.unit||'',
+      label:typeLabel(s), headline:s.headline, detail:s.detail
+    }))
+  };
+}
+
+function downloadBlob(blob, name){
+  const u=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),15000);
+}
+
+function exportColabProject(){
+  try{
+    const project=makeProject();
+    const blob=new Blob([JSON.stringify(project,null,2)],{type:'application/json'});
+    downloadBlob(blob,'automotion-astronomia-project.json');
+    const projectURL=URL.createObjectURL(blob);
+    downloadProject.href=projectURL; downloadProject.classList.remove('hidden');
+    setStatus('Projeto JSON pronto • abra o Colab');
+    setProgress('Projeto exportado. Envie o JSON + vídeo para o Colab.',100,true);
+    setTimeout(clearProgress,2200);
+  }catch(e){alert(e.message||String(e))}
+}
+
 async function extractAudioLocal(file,onProgress=()=>{}){
   onProgress(10);const ab=await file.arrayBuffer();onProgress(35);const AC=window.AudioContext||window.webkitAudioContext;if(!AC)throw new Error('Seu navegador não oferece Web Audio.');const ctx=new AC();
   try{const decoded=await ctx.decodeAudioData(ab.slice(0));onProgress(65);const rate=16000,count=Math.max(1,Math.ceil(decoded.duration*rate)),OC=window.OfflineAudioContext||window.webkitOfflineAudioContext;if(!OC)throw new Error('Seu navegador não oferece OfflineAudioContext.');const off=new OC(1,count,rate),src=off.createBufferSource();src.buffer=decoded;src.connect(off.destination);src.start(0);const rendered=await off.startRendering();onProgress(90);return new Float32Array(rendered.getChannelData(0))}finally{try{await ctx.close()}catch{}}
@@ -271,4 +324,4 @@ async function convertMp4(){
 }
 
 window.addEventListener('beforeunload',()=>{revokeURL(videoURL);revokeURL(lastWebmURL);revokeURL(lastMp4URL)});
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=8').catch(()=>{});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=9').catch(()=>{});
