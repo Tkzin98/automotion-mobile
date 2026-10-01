@@ -1,22 +1,9 @@
-# AutoMotion Mobile V10
+# AutoMotion Mobile V11
 
-A V10 separa completamente a interface do processamento pesado.
+A renderização voltou para a página e não depende mais do Google Colab nem de FFmpeg.wasm.
 
-## No celular / HTML
-- seleção e prévia do vídeo
-- instrução da edição
-- criação e edição de visualizações
-- início/fim de cada elemento
-- exportação de projeto em ZIP
+Motor: Mediabunny + WebCodecs. O vídeo é processado localmente no navegador; `Conversion.process()` desenha as visualizações sobre cada frame e a conversão mantém a trilha de áudio primária.
 
-## No Google Colab
-- recebe vídeo + projeto.json
-- análise/transcrição
-- geração das visualizações
-- FFmpeg
-- renderização final
+Teste primeiro com **Testar 10s**. O tempo de renderização ainda depende do celular, mas a implementação evita o caminho FFmpeg.wasm e tenta aceleração de hardware do WebCodecs.
 
-O navegador não renderiza o MP4 final.
-
-## Publicação
-Envie os arquivos para a raiz do GitHub Pages. O notebook fica em `colaboração/AutoMotion_Renderer.ipynb`.
+Biblioteca: https://mediabunny.dev/
