@@ -331,12 +331,19 @@ GPU: ${gpuErr?.message || gpuErr}`);
 }
 
 function setupRenderCanvas(){
-  const w = sourceVideo.videoWidth || 720, h = sourceVideo.videoHeight || 1280;
-  const scale = Math.min(1, 960 / Math.max(w,h));
+  // Keep the source resolution whenever practical. The old version capped the
+  // render at 960px, which visibly softened 1080p/4K phone footage.
+  const w = sourceVideo.videoWidth || 720;
+  const h = sourceVideo.videoHeight || 1280;
+  const maxDimension = 1920;
+  const scale = Math.min(1, maxDimension / Math.max(w,h));
   const cw = Math.max(320, Math.round(w*scale));
   const ch = Math.max(320, Math.round(h*scale));
   renderCanvas.width=cw; renderCanvas.height=ch;
   playCanvas.width=cw; playCanvas.height=ch;
+  const ctx = playCanvas.getContext('2d', { alpha:false, desynchronized:true });
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
 }
 
 sourceVideo.addEventListener('timeupdate', drawCurrentFrame);
@@ -366,14 +373,18 @@ function drawMotions(ctx,w,h,t){
     bold:{fill:'rgba(245,245,245,.96)',stroke:'rgba(245,245,245,.96)',text:'#0a0910',accent:'#0a0910'}
   }[style];
   const pad = Math.max(14,Math.round(w*.028));
-  const cardW = Math.min(w*.74, 420);
-  const cardH = Math.max(66, Math.min(90, h*.09));
+  const cardW = Math.min(w*.74, Math.max(420, w*.52));
+  const cardH = Math.max(78, Math.min(116, h*.095));
   const x = pos==='left' ? pad : w-cardW-pad;
   const baseY = h*.20;
-  const p = Math.min(1,Math.max(0,(t-seg.start)/0.35));
-  const eased = 1 - Math.pow(1-p,3);
-  const dx = (pos==='left'?-1:1) * (1-eased) * 40;
-  const alpha = eased;
+  // Smooth, frame-rate-independent entrance. Using an ease-out-back curve
+  // gives the card a subtle premium overshoot instead of a linear jump.
+  const p = Math.min(1,Math.max(0,(t-seg.start)/0.48));
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  const eased = 1 + c3*Math.pow(p-1,3) + c1*Math.pow(p-1,2);
+  const dx = (pos==='left'?-1:1) * (1-eased) * 64;
+  const alpha = Math.min(1, p*1.8);
   ctx.save();
   ctx.globalAlpha=alpha;
   roundRect(ctx,x+dx,baseY,cardW,cardH,18,theme.fill,theme.stroke);
@@ -438,12 +449,16 @@ async function exportWebM(){
 
   setupRenderCanvas();
   const ctx = playCanvas.getContext('2d');
-  const canvasStream = playCanvas.captureStream(30);
+  // 60 FPS makes slide-ins and easing much smoother than the previous 30 FPS.
+  const canvasStream = playCanvas.captureStream(60);
   const mediaStream = sourceVideo.captureStream ? sourceVideo.captureStream() : null;
   if(mediaStream){ mediaStream.getAudioTracks().forEach(track=>canvasStream.addTrack(track)); }
   const mime = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(x=>MediaRecorder.isTypeSupported(x));
   if(!mime){ alert('O navegador não consegue exportar WebM.'); recording=false; exportBtn.disabled=false; previewBtn.disabled=false; return; }
-  const recorder = new MediaRecorder(canvasStream,{mimeType:mime,videoBitsPerSecond:5_000_000});
+  // Higher bitrate preserves text edges and the original phone footage much better.
+  const pixels = playCanvas.width * playCanvas.height;
+  const targetBitrate = pixels >= 2073600 ? 12_000_000 : 8_000_000;
+  const recorder = new MediaRecorder(canvasStream,{mimeType:mime,videoBitsPerSecond:targetBitrate,audioBitsPerSecond:192_000});
   const chunks=[];
   recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
   const done = new Promise(resolve=>recorder.onstop=resolve);
@@ -457,6 +472,8 @@ async function exportWebM(){
       if(!recording){ sourceVideo.pause(); resolve(); return; }
       const t=sourceVideo.currentTime;
       ctx.clearRect(0,0,playCanvas.width,playCanvas.height);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(sourceVideo,0,0,playCanvas.width,playCanvas.height);
       drawMotions(ctx,playCanvas.width,playCanvas.height,t);
       setProgress('Renderizando vídeo no celular…', sourceVideo.duration ? t/sourceVideo.duration*100 : 0);
