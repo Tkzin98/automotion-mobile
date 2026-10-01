@@ -73,7 +73,7 @@
       <button class="primary-btn" id="analyzeBtn" disabled>
         <span>✦</span> Analisar e gerar motions
       </button>
-      <p class="small-note">Na primeira execução, o celular baixa o modelo Whisper para o cache do navegador. Depois ele pode ser reutilizado.</p>
+      <p class="small-note">A análise não carrega o FFmpeg. O Whisper é baixado somente ao analisar; o FFmpeg só é carregado se você pedir MP4.</p>
 
       <div class="progress-area hidden" id="progressArea">
         <div class="progress-row">
@@ -104,7 +104,7 @@
             <button class="secondary-btn" id="exportBtn">⬇ Exportar WebM</button>
           </div>
           <a class="download-link hidden" id="downloadWebm" download="automotion-video.webm">Baixar vídeo WebM</a>
-          <button class="secondary-btn full hidden" id="mp4Btn">Converter WebM → MP4</button>
+          <button class="secondary-btn full hidden" id="mp4Btn">Converter WebM → MP4 (carrega FFmpeg)</button>
           <a class="download-link hidden" id="downloadMp4" download="automotion-video.mp4">Baixar MP4</a>
         </div>
 

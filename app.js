@@ -32,6 +32,7 @@ let whisperPipe = null;
 let ffmpeg = null;
 let recording = false;
 let lastBlob = null;
+let ffmpegLoadPromise = null;
 
 const TOPICS = [
   { key:'finanças', icon:'₿', words:['dinheiro','financ','invest','salário','salario','lucro','renda','juros','ação','acoes','ações','bolsa','banco','milion','pobre','riqueza','orçamento','credito','crédito','dívida','divida'] },
@@ -97,8 +98,10 @@ async function analyzeVideo(){
   try{
     wordChunks = [];
     motionSegments = [];
-    setProgress('Preparando FFmpeg…', 5);
-    const wavBlob = await extractAudio(currentVideoFile);
+    setProgress('Preparando áudio no celular…', 5);
+    const wavBlob = await extractAudioLocal(currentVideoFile, (pct) => {
+      setProgress('Preparando áudio no celular…', 5 + pct * 15);
+    });
     setProgress('Carregando Whisper…', 25);
     const pipe = await getWhisper();
     setProgress('Transcrevendo áudio…', 38);
@@ -191,18 +194,29 @@ function renderSegmentList(){
   });
 }
 
-async function loadFFmpeg(){
+async function loadFFmpeg(onProgress){
   if(ffmpeg?.isLoaded()) return ffmpeg;
-  if(!window.FFmpeg){
-    await loadScript('https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js');
-  }
-  const {createFFmpeg, fetchFile} = window.FFmpeg;
-  ffmpeg = createFFmpeg({
-    log:false,
-    corePath:'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.6/dist/ffmpeg-core.js'
-  });
-  await ffmpeg.load();
-  return ffmpeg;
+  if(ffmpegLoadPromise) return ffmpegLoadPromise;
+  ffmpegLoadPromise = (async () => {
+    setProgress('Baixando FFmpeg para conversão MP4…', 5);
+    if(!window.FFmpeg){
+      await loadScript('https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js');
+    }
+    const {createFFmpeg} = window.FFmpeg;
+    ffmpeg = createFFmpeg({
+      log:false,
+      corePath:'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.6/dist/ffmpeg-core.js',
+      progress: ({ratio}) => {
+        const pct = Number.isFinite(ratio) ? Math.max(0, Math.min(1, ratio)) * 100 : 0;
+        if(onProgress) onProgress(pct);
+        else setProgress('Carregando FFmpeg…', pct);
+      }
+    });
+    await ffmpeg.load();
+    return ffmpeg;
+  })();
+  try { return await ffmpegLoadPromise; }
+  catch (err) { ffmpegLoadPromise = null; ffmpeg = null; throw err; }
 }
 
 function loadScript(src){
@@ -213,16 +227,56 @@ function loadScript(src){
   });
 }
 
-async function extractAudio(file){
-  const fm = await loadFFmpeg();
-  const {fetchFile} = window.FFmpeg;
-  const inName = `input-${Date.now()}.${(file.name.split('.').pop()||'mp4').toLowerCase()}`;
-  const outName = `audio-${Date.now()}.wav`;
-  await fm.FS('writeFile', inName, await fetchFile(file));
-  await fm.run('-i', inName, '-vn', '-ac','1','-ar','16000','-c:a','pcm_s16le',outName);
-  const data = fm.FS('readFile', outName);
-  try{ fm.FS('unlink',inName); fm.FS('unlink',outName); }catch{}
-  return new Blob([data.buffer],{type:'audio/wav'});
+async function extractAudioLocal(file, onProgress = () => {}){
+  // Analysis does NOT need FFmpeg. Decode the video's audio using the browser's
+  // native media codecs, then resample to 16 kHz mono WAV for Whisper.
+  onProgress(10);
+  const arrayBuffer = await file.arrayBuffer();
+  onProgress(35);
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if(!AudioCtx) throw new Error('Seu navegador não oferece Web Audio para analisar o áudio.');
+  const ctx = new AudioCtx();
+  try {
+    const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
+    onProgress(65);
+    const targetRate = 16000;
+    const duration = decoded.duration;
+    const frameCount = Math.max(1, Math.ceil(duration * targetRate));
+    const OfflineCtx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if(!OfflineCtx) throw new Error('Seu navegador não oferece OfflineAudioContext.');
+    const offline = new OfflineCtx(1, frameCount, targetRate);
+    const source = offline.createBufferSource();
+    source.buffer = decoded;
+    source.connect(offline.destination);
+    source.start(0);
+    const rendered = await offline.startRendering();
+    onProgress(85);
+    const wav = audioBufferToWav(rendered);
+    onProgress(100);
+    return wav;
+  } finally {
+    try { await ctx.close(); } catch {}
+  }
+}
+
+function audioBufferToWav(buffer){
+  const samples = buffer.getChannelData(0);
+  const dataSize = samples.length * 2;
+  const out = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(out);
+  const writeString = (offset, str) => { for(let i=0;i<str.length;i++) view.setUint8(offset+i, str.charCodeAt(i)); };
+  writeString(0,'RIFF'); view.setUint32(4,36+dataSize,true); writeString(8,'WAVE');
+  writeString(12,'fmt '); view.setUint32(16,16,true); view.setUint16(20,1,true);
+  view.setUint16(22,1,true); view.setUint32(24,16000,true); view.setUint32(28,32000,true);
+  view.setUint16(32,2,true); view.setUint16(34,16,true); writeString(36,'data');
+  view.setUint32(40,dataSize,true);
+  let offset=44;
+  for(let i=0;i<samples.length;i++){
+    const s=Math.max(-1,Math.min(1,samples[i]));
+    view.setInt16(offset, s < 0 ? s*0x8000 : s*0x7fff, true);
+    offset += 2;
+  }
+  return new Blob([out],{type:'audio/wav'});
 }
 
 async function getWhisper(){
@@ -397,7 +451,7 @@ async function convertMp4(){
   setStatus('Convertendo para MP4…');
   setProgress('Carregando conversor…',5);
   try{
-    const fm = await loadFFmpeg();
+    const fm = await loadFFmpeg((pct) => setProgress('Baixando FFmpeg para conversão MP4…', pct));
     const {fetchFile} = window.FFmpeg;
     const inName='automotion.webm', outName='automotion.mp4';
     await fm.FS('writeFile',inName,await fetchFile(lastBlob));
