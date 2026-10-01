@@ -73,7 +73,7 @@
       <button class="primary-btn" id="analyzeBtn" disabled>
         <span>✦</span> Analisar e gerar motions
       </button>
-      <p class="small-note">A análise não carrega o FFmpeg. O Whisper é baixado somente ao analisar; o FFmpeg só é carregado se você pedir MP4.</p>
+      <p class="small-note">A análise não carrega o FFmpeg. O Whisper é baixado somente ao analisar. Por compatibilidade com celulares, o primeiro backend é WASM/CPU; GPU só entra como fallback.</p>
 
       <div class="progress-area hidden" id="progressArea">
         <div class="progress-row">
@@ -127,6 +127,6 @@
 
   <footer>AutoMotion Mobile • MVP local para celular • Abra por HTTPS ou pelo preview de um servidor local.</footer>
 
-  <script type="module" src="app.js"></script>
+  <script type="module" src="app.js?v=5"></script>
 </body>
 </html>

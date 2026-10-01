@@ -29,6 +29,7 @@ let currentVideoFile = null;
 let wordChunks = [];
 let motionSegments = [];
 let whisperPipe = null;
+let whisperBackend = 'wasm';
 let ffmpeg = null;
 let recording = false;
 let lastBlob = null;
@@ -83,7 +84,11 @@ videoInput.addEventListener('change', () => {
 
 sourceVideo.addEventListener('loadedmetadata', () => {
   const w = sourceVideo.videoWidth, h = sourceVideo.videoHeight;
-  videoMeta.textContent = `${currentVideoFile?.name ?? 'Vídeo'} • ${w}×${h} • ${fmtTime(sourceVideo.duration)}`;
+  const duration = sourceVideo.duration;
+  videoMeta.textContent = `${currentVideoFile?.name ?? 'Vídeo'} • ${w}×${h} • ${fmtTime(duration)}`;
+  if (Number.isFinite(duration) && duration > 180) {
+    setStatus('Vídeo longo — pode exigir mais memória');
+  }
 });
 
 analyzeBtn.addEventListener('click', analyzeVideo);
@@ -94,6 +99,7 @@ mp4Btn.addEventListener('click', convertMp4);
 async function analyzeVideo(){
   if (!currentVideoFile) return;
   analyzeBtn.disabled = true;
+  exportBtn.disabled = true;
   setStatus('Analisando…');
   try{
     wordChunks = [];
@@ -104,19 +110,14 @@ async function analyzeVideo(){
     });
     setProgress('Carregando Whisper…', 25);
     const pipe = await getWhisper();
-    setProgress('Transcrevendo áudio…', 38);
-    const wavURL = URL.createObjectURL(wavBlob);
-    const result = await pipe(wavURL, {
-      language: 'portuguese',
+    setProgress(`Transcrevendo áudio (${whisperBackend.toUpperCase()})…`, 38);
+    const result = await pipe(wavBlob, {
+      language: 'pt',
       task: 'transcribe',
       return_timestamps: 'word',
       chunk_length_s: 30,
-      stride_length_s: 5,
-      callback_function: (info) => {
-        if (info?.progress != null) setProgress('Transcrevendo áudio…', 38 + info.progress * 45);
-      }
+      stride_length_s: 5
     });
-    URL.revokeObjectURL(wavURL);
     wordChunks = normalizeChunks(result?.chunks || []);
     setProgress('Criando motions…', 88);
     motionSegments = buildMotionSegments(wordChunks);
@@ -124,16 +125,17 @@ async function analyzeVideo(){
     setupRenderCanvas();
     resultCard.classList.remove('hidden');
     setProgress('Finalizado', 100);
-    setStatus(`${motionSegments.length} motions prontos`);
+    setStatus(`${motionSegments.length} motions prontos • Whisper ${whisperBackend.toUpperCase()}`);
     setTimeout(clearProgress, 900);
     drawCurrentFrame();
   }catch(err){
     console.error(err);
     setStatus('Erro');
-    alert(`Não foi possível analisar este vídeo.\n\n${err?.message || err}`);
+    alert(`Não foi possível analisar este vídeo.\n\n${err?.message || err}\n\nDica: teste primeiro um vídeo curto (10–30 s) no Chrome Android.`);
     clearProgress();
   }finally{
     analyzeBtn.disabled = false;
+    exportBtn.disabled = false;
   }
 }
 
@@ -251,32 +253,12 @@ async function extractAudioLocal(file, onProgress = () => {}){
     source.start(0);
     const rendered = await offline.startRendering();
     onProgress(85);
-    const wav = audioBufferToWav(rendered);
+    const samples = new Float32Array(rendered.getChannelData(0));
     onProgress(100);
-    return wav;
+    return samples;
   } finally {
     try { await ctx.close(); } catch {}
   }
-}
-
-function audioBufferToWav(buffer){
-  const samples = buffer.getChannelData(0);
-  const dataSize = samples.length * 2;
-  const out = new ArrayBuffer(44 + dataSize);
-  const view = new DataView(out);
-  const writeString = (offset, str) => { for(let i=0;i<str.length;i++) view.setUint8(offset+i, str.charCodeAt(i)); };
-  writeString(0,'RIFF'); view.setUint32(4,36+dataSize,true); writeString(8,'WAVE');
-  writeString(12,'fmt '); view.setUint32(16,16,true); view.setUint16(20,1,true);
-  view.setUint16(22,1,true); view.setUint32(24,16000,true); view.setUint32(28,32000,true);
-  view.setUint16(32,2,true); view.setUint16(34,16,true); writeString(36,'data');
-  view.setUint32(40,dataSize,true);
-  let offset=44;
-  for(let i=0;i<samples.length;i++){
-    const s=Math.max(-1,Math.min(1,samples[i]));
-    view.setInt16(offset, s < 0 ? s*0x8000 : s*0x7fff, true);
-    offset += 2;
-  }
-  return new Blob([out],{type:'audio/wav'});
 }
 
 async function canUseWebGPU(){
@@ -293,32 +275,59 @@ async function canUseWebGPU(){
 async function getWhisper(){
   if(whisperPipe) return whisperPipe;
   const mod = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/+esm');
-  const {pipeline} = mod;
+  const {pipeline, env} = mod;
+  env.useBrowserCache = true;
 
   // No celular, navigator.gpu pode existir mesmo quando o Chrome não consegue
   // obter um adaptador. Por isso testamos requestAdapter() antes de selecionar WebGPU.
   const webgpu = await canUseWebGPU();
 
-  if(webgpu){
-    try{
-      updateProgress(18, 'Preparando Whisper (GPU)…');
+  const modelOptions = {
+    dtype:'q4',
+    device:'wasm',
+    progress_callback: (info) => {
+      if (info?.progress != null) {
+        const pct = Number(info.progress);
+        const value = Number.isFinite(pct) ? Math.max(26, Math.min(37, 26 + pct * 0.12)) : 30;
+        setProgress('Baixando modelo Whisper…', value);
+      } else if (info?.status) {
+        setProgress(String(info.status), 30);
+      }
+    }
+  };
+
+  setProgress('Preparando Whisper (CPU)…', 26);
+  try {
+    whisperPipe = await pipeline('automatic-speech-recognition','Xenova/whisper-tiny', modelOptions);
+    whisperBackend = 'wasm';
+    return whisperPipe;
+  } catch (cpuErr) {
+    console.warn('Whisper em WASM falhou. Tentando WebGPU como fallback.', cpuErr);
+    if (!webgpu) throw new Error(`O Whisper não conseguiu iniciar neste celular.
+
+${cpuErr?.message || cpuErr}`);
+    setProgress('Preparando Whisper (GPU)…', 30);
+    try {
       whisperPipe = await pipeline('automatic-speech-recognition','Xenova/whisper-tiny',{
         dtype:'q4',
-        device:'webgpu'
+        device:'webgpu',
+        progress_callback: (info) => {
+          if (info?.progress != null) {
+            const pct = Number(info.progress);
+            if (Number.isFinite(pct)) setProgress('Baixando modelo Whisper…', 26 + Math.max(0, Math.min(1, pct)) * 12);
+          }
+        }
       });
+      whisperBackend = 'webgpu';
       return whisperPipe;
-    }catch(err){
-      console.warn('WebGPU falhou; fazendo fallback para WASM/CPU.', err);
-      whisperPipe = null;
+    } catch (gpuErr) {
+      throw new Error(`Não foi possível iniciar o Whisper.
+
+CPU: ${cpuErr?.message || cpuErr}
+
+GPU: ${gpuErr?.message || gpuErr}`);
     }
   }
-
-  updateProgress(18, 'Preparando Whisper (CPU)…');
-  whisperPipe = await pipeline('automatic-speech-recognition','Xenova/whisper-tiny',{
-    dtype:'q4',
-    device:'wasm'
-  });
-  return whisperPipe;
 }
 
 function setupRenderCanvas(){

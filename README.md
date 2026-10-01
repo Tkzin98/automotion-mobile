@@ -34,5 +34,13 @@ O FFmpeg não é baixado na abertura nem na análise; ele só é carregado ao to
 Este MVP não inclui rastreamento facial MediaPipe/YOLO nem geração de ilustrações Lottie. A posição automática usa alternância inteligente entre esquerda/direita; isso deixa a base pronta para acrescentar rastreamento real na próxima versão.
 
 
-### Correção V4
-A seleção de WebGPU agora testa `navigator.gpu.requestAdapter()` e, se a GPU não estiver disponível ou falhar, o Whisper automaticamente usa WASM/CPU. Não é necessário ativar `--enable-unsafe-webgpu`.
+### Correção V5
+A V5 corrige a chamada inexistente `updateProgress`, usa `progress_callback` para o carregamento do modelo, passa o áudio como `Float32Array` a 16 kHz, e usa WASM/CPU como backend principal. WebGPU só é tentado como fallback quando há um adaptador real disponível. Não é necessário ativar `--enable-unsafe-webgpu`.
+
+## V5 — correções de compatibilidade
+
+- Corrige a referência inexistente `updateProgress` que fazia a análise parar imediatamente.
+- Usa `progress_callback`, que é a opção suportada pelo Transformers.js para acompanhar o download/carregamento do modelo.
+- A transcrição passa o áudio como `Float32Array` mono a 16 kHz, formato aceito diretamente pela pipeline de reconhecimento de fala.
+- WASM/CPU é o backend padrão e mais compatível; WebGPU é tentado apenas como fallback se existir um adaptador real.
+- FFmpeg continua fora da abertura e da análise; só é carregado para a conversão opcional em MP4.
