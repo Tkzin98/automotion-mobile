@@ -1,4 +1,4 @@
-// AutoMotion Studio V13.1 — não cacheia arquivos do editor.
+// AutoMotion Studio V13.2 — não cacheia arquivos do editor.
 self.addEventListener("install",e=>e.waitUntil(self.skipWaiting()));
 self.addEventListener("activate",e=>e.waitUntil(self.clients.claim()));
 self.addEventListener("fetch",()=>{});

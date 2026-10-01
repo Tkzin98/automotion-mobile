@@ -1,4 +1,4 @@
-# AutoMotion Studio V13.1
+# AutoMotion Studio V13.2
 
 Versão corrigida do motor de IA para GitHub Pages.
 
