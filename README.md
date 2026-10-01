@@ -1,3 +1,5 @@
-# AutoMotion Studio V12.4
+# AutoMotion Studio V12.5
 
-Correções: importação de vídeo e seleção de design funcionam sem depender dos módulos externos; Mediabunny e Transformers.js carregam sob demanda. Removido o ciclo de clique do input de vídeo dentro do label.
+Correção do progresso do Mediabunny: `Conversion.onProgress` é configurado como propriedade antes de `execute()`.
+
+Abra no GitHub Pages com `?v=12.5` após publicar.
