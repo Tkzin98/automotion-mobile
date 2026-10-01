@@ -1,9 +1,9 @@
 {
-  "name": "AutoMotion Mobile",
-  "short_name": "AutoMotion",
+  "name": "AutoMotion Mobile — Astronomia",
+  "short_name": "AutoMotion Astro",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#08070c",
-  "theme_color": "#0b0712",
-  "description": "Editor local de motion automático para vídeos."
+  "background_color": "#050713",
+  "theme_color": "#050713",
+  "description": "Visualizações automáticas de informação para documentários de astronomia."
 }
