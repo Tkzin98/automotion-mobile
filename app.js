@@ -1,4 +1,4 @@
-import {ALL_FORMATS,BlobSource,BufferTarget,Conversion,Input,Mp4OutputFormat,Output,Quality,WavOutputFormat} from "https://esm.sh/mediabunny@1.61.0?bundle&v=12.1.0";
+import {ALL_FORMATS,BlobSource,BufferTarget,Conversion,Input,Mp4OutputFormat,Output,Quality,WavOutputFormat} from "https://esm.sh/mediabunny@1.61.0?bundle&v=12.2.0";
 import {pipeline,env} from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0/+esm";
 env.allowLocalModels=false;env.allowRemoteModels=true;
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)],MODEL="onnx-community/whisper-tiny";
@@ -50,4 +50,4 @@ $("#render").onclick=()=>render(false);$("#test").onclick=()=>render(true);$("#h
 
 
 // Atualiza o Service Worker sem bloquear o editor.
-if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=12.1.0', {updateViaCache:'none'}).then(r => r.update()).catch(()=>{})); }
+// Service Worker disabled in V12.2 to prevent stale editor code from being served on GitHub Pages.

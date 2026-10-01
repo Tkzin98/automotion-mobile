@@ -1,19 +1,11 @@
-# AutoMotion Studio V12
+# AutoMotion Studio V12.2
 
-Editor mobile-first para criar visualizações científicas automaticamente a partir da narração do vídeo.
+Correção de carregamento para GitHub Pages/PWA.
 
-## Fluxo
-1. Importar vídeo
-2. Escolher um design visual
-3. Mediabunny extrai o áudio localmente
-4. Whisper via Transformers.js transcreve com timestamps
-5. O analisador local identifica fatos quantitativos e escolhe o tipo de visual
-6. Preview e renderização ficam no navegador com Mediabunny/WebCodecs
-
-A primeira análise baixa o modelo Whisper. Depois o navegador pode reutilizá-lo pelo cache.
+- Desativa o Service Worker antigo para impedir cache de `app.js`.
+- Remove o carregamento direto do módulo e inicializa `app.js?v=12.2.0` depois de desregistrar SW antigos.
+- Mantém o renderizador Mediabunny da V12.1.
+- Mantém análise automática via Whisper/Transformers.js.
 
 ## Publicação
-Substitua `index.html`, `app.js`, `estilos.css`, `sw.js`, `manifesto.webmanifest` no GitHub Pages.
-
-## Nota
-A V12 usa regras locais determinísticas para transformar números, unidades e relações em gráficos. Isso mantém o processamento da narração local e previsível, mas a cobertura semântica ainda é menor que a de um LLM geral.
+Substitua os arquivos do repositório pelos arquivos desta pasta. Abra a página com `?v=12.2` na primeira vez.
