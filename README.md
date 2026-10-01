@@ -1,11 +1,17 @@
-# AutoMotion Mobile V7 — Astronomy Information Engine
+# AutoMotion Mobile V8
 
-A V7 troca a lógica de “palavra → card” por “afirmação mensurável → visualização”. O foco é documentário de astronomia.
+Evolução focada em estabilidade e renderização mobile.
 
-Detecta localmente padrões de comparação (`318 vezes`), percentual, distância (`150 milhões de km`), tempo/escala temporal, temperatura, velocidade e quantidades contextualizadas.
+## Principais mudanças
+- Render otimizado: 30 FPS no Android/iPhone e 60 FPS no desktop.
+- Resolução máxima adaptativa: 1280 px no mobile e 1920 px no desktop.
+- Usa `requestVideoFrameCallback` quando disponível para acompanhar os frames reais do vídeo.
+- Atualização da barra de progresso limitada para reduzir carga na interface.
+- `captureStream()` ajustado para a taxa de render.
+- Bitrate reduzido de forma adaptativa para evitar picos de memória/CPU.
+- Botão para interromper uma renderização.
+- URLs de WebM/MP4 antigas são liberadas para evitar acumulo de memória.
+- Conversão MP4 usa preset ultrafast e áudio 96 kbps para diminuir carga.
 
-O fluxo continua usando Whisper Tiny via Transformers.js no navegador; CPU/WASM é o caminho principal e WebGPU só é usado quando disponível. FFmpeg permanece opcional e só é carregado para conversão MP4.
-
-Cada afirmação recebe timestamp, tipo, valor e unidade. A lista no app mostra o texto que ativou o gráfico. Um duplo toque alterna o gráfico entre ativo e desativado.
-
-V7 ainda é um motor local leve: não tenta resolver todas as ambiguidades de linguagem com um LLM grande. O objetivo desta etapa é criar a fundação do motor “informação → visualização” com baixo consumo e funcionamento gratuito no celular.
+## Importante
+A exportação no navegador acontece em tempo real ou próxima disso; um vídeo de 5 minutos pode levar alguns minutos para renderizar. A V8 prioriza não congelar o navegador durante esse processo.
