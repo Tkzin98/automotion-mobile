@@ -1,8 +1,28 @@
 const MB_URL="https://esm.sh/mediabunny@1.61.0?bundle";
-const HF_URL="https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0/dist/transformers.web.js";
+const HF_URLS=["https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0","https://esm.sh/@huggingface/transformers@4.3.0?bundle"];
+const ORT_WASM="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/";
 let MB=null, HF=null;
 async function loadMedia(){if(MB)return MB;status("Carregando motor de mídia",8,"Preparando o renderizador no navegador…");MB=await import(MB_URL);return MB}
-async function loadAI(){if(HF)return HF;status("Preparando IA",22,"Carregando o motor Whisper no navegador…");HF=await import(HF_URL);HF.env.allowLocalModels=false;HF.env.allowRemoteModels=true;return HF}
+async function loadAI(){
+  if(HF)return HF;
+  status("Preparando IA",22,"Carregando o motor Whisper no navegador…");
+  let last=null;
+  for(const src of HF_URLS){
+    try{
+      const mod=await import(src);
+      const env=mod.env;
+      env.allowLocalModels=false;
+      env.allowRemoteModels=true;
+      try{env.backends.onnx.wasm.wasmPaths=ORT_WASM}catch{}
+      HF=mod;
+      return HF;
+    }catch(e){
+      last=e;
+      console.warn("Falha ao carregar Transformers.js:",src,e);
+    }
+  }
+  throw last||new Error("Não foi possível carregar o motor de IA.");
+}
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)],MODEL="onnx-community/whisper-tiny";
 let file=null,url=null,audioUrl=null,autoEdits=[],theme="cosmic",transcriber=null,currentRun=0;
 const ICON={comparison:"↔",scale:"◉",percentage:"%",distance:"⌁",speed:"➜",duration:"◷",timeline:"╱",count:"#",temperature:"°",fact:"✦"};
@@ -66,8 +86,7 @@ async function decodeAudio(f,run){
 }
 async function model(run){
   if(transcriber)return transcriber;
-  const {pipeline,env}=await loadAI();
-  env.allowLocalModels=false;env.allowRemoteModels=true;
+  const {pipeline}=await loadAI();
   const progress_callback=info=>{
     if(run!==currentRun)return;
     const p=Number.isFinite(info?.progress)?info.progress:0;
@@ -75,25 +94,9 @@ async function model(run){
     const pct=Math.max(20,Math.min(78,20+p*.58));
     status("Baixando modelo de transcrição",pct,fileName?`${fileName} • ${Math.round(p)}%`:"Preparando Whisper…");
   };
-  const hasGpu=!!navigator.gpu;
-  async function attempt(device){
-    const opts=device==="webgpu"
-      ? {device:"webgpu",dtype:{encoder_model:"fp32",decoder_model_merged:"q4"},progress_callback}
-      : {device:"wasm",dtype:"q8",progress_callback};
-    return await pipeline("automatic-speech-recognition",MODEL,opts);
-  }
   try{
-    if(hasGpu){
-      try{
-        const adapter=await navigator.gpu.requestAdapter();
-        if(adapter){
-          status("Preparando Whisper GPU",23,"Aceleração WebGPU disponível — testando o motor…");
-          try{transcriber=await attempt("webgpu");return transcriber}catch(e){console.warn("WebGPU Whisper failed",e)}
-        }
-      }catch(e){console.warn("WebGPU probe failed",e)}
-    }
-    status("Preparando Whisper CPU",23,"Usando modo compatível no navegador…");
-    transcriber=await attempt("wasm");
+    status("Preparando Whisper",23,"Modo compatível WASM — sem dependência do WebGPU…");
+    transcriber=await pipeline("automatic-speech-recognition",MODEL,{device:"wasm",dtype:"q8",progress_callback});
     return transcriber;
   }catch(e){
     transcriber=null;
