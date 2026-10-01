@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0712">
+  <meta name="description" content="Editor de motion automático para vídeos, rodando localmente no navegador.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+  <title>AutoMotion Mobile</title>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <span class="eyebrow">EDITOR LOCAL • GRÁTIS</span>
+      <h1>AutoMotion <span>Mobile</span></h1>
+      <p>Transcreva, detecte assuntos e aplique cards animados sem mandar o vídeo para um servidor.</p>
+    </div>
+    <div class="status-pill" id="statusPill">Pronto</div>
+  </header>
+
+  <main class="app-shell">
+    <section class="card upload-card">
+      <div class="section-title">
+        <div>
+          <span class="step">01</span>
+          <h2>Seu vídeo</h2>
+        </div>
+        <span class="muted" id="videoMeta">Nenhum arquivo</span>
+      </div>
+
+      <label class="dropzone" id="dropzone" for="videoInput">
+        <input id="videoInput" type="file" accept="video/*">
+        <div class="drop-icon">＋</div>
+        <strong>Toque para escolher um vídeo</strong>
+        <span>MP4, WebM, MOV… • processamento local</span>
+      </label>
+
+      <div class="preview-wrap hidden" id="previewWrap">
+        <video id="sourceVideo" playsinline controls preload="metadata"></video>
+        <canvas id="renderCanvas" class="hidden"></canvas>
+      </div>
+    </section>
+
+    <section class="card controls-card">
+      <div class="section-title">
+        <div>
+          <span class="step">02</span>
+          <h2>Automação</h2>
+        </div>
+        <span class="muted">sem API paga</span>
+      </div>
+
+      <div class="control-grid">
+        <label class="control">
+          <span>Estilo</span>
+          <select id="styleSelect">
+            <option value="neon">Neon financeiro</option>
+            <option value="clean">Clean</option>
+            <option value="bold">Bold</option>
+          </select>
+        </label>
+        <label class="control">
+          <span>Posição dos cards</span>
+          <select id="positionSelect">
+            <option value="auto">Automática</option>
+            <option value="left">Esquerda</option>
+            <option value="right">Direita</option>
+          </select>
+        </label>
+      </div>
+
+      <button class="primary-btn" id="analyzeBtn" disabled>
+        <span>✦</span> Analisar e gerar motions
+      </button>
+      <p class="small-note">A análise não carrega o FFmpeg. O Whisper é baixado somente ao analisar; o FFmpeg só é carregado se você pedir MP4.</p>
+
+      <div class="progress-area hidden" id="progressArea">
+        <div class="progress-row">
+          <span id="progressLabel">Preparando…</span>
+          <span id="progressValue">0%</span>
+        </div>
+        <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+      </div>
+    </section>
+
+    <section class="card result-card hidden" id="resultCard">
+      <div class="section-title">
+        <div>
+          <span class="step">03</span>
+          <h2>Resultado</h2>
+        </div>
+        <span class="tag" id="topicTag">Analisado</span>
+      </div>
+
+      <div class="result-grid">
+        <div class="result-preview">
+          <div class="phone-stage">
+            <canvas id="playCanvas"></canvas>
+            <div class="stage-hint" id="stageHint">Toque em reproduzir no vídeo de origem</div>
+          </div>
+          <div class="stage-actions">
+            <button class="secondary-btn" id="previewBtn">▶ Pré-visualizar</button>
+            <button class="secondary-btn" id="exportBtn">⬇ Exportar WebM</button>
+          </div>
+          <a class="download-link hidden" id="downloadWebm" download="automotion-video.webm">Baixar vídeo WebM</a>
+          <button class="secondary-btn full hidden" id="mp4Btn">Converter WebM → MP4 (carrega FFmpeg)</button>
+          <a class="download-link hidden" id="downloadMp4" download="automotion-video.mp4">Baixar MP4</a>
+        </div>
+
+        <div class="transcript-panel">
+          <div class="mini-head">
+            <strong>Transcrição + gatilhos</strong>
+            <span id="segmentCount">0 cards</span>
+          </div>
+          <div class="segment-list" id="segmentList"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="info-row">
+      <div class="info-item"><span>🔒</span><div><strong>Local</strong><small>O vídeo não é enviado para uma API.</small></div></div>
+      <div class="info-item"><span>🧠</span><div><strong>Whisper</strong><small>Texto + timestamps.</small></div></div>
+      <div class="info-item"><span>⚡</span><div><strong>Motion</strong><small>Cards gerados automaticamente.</small></div></div>
+    </section>
+  </main>
+
+  <footer>AutoMotion Mobile • MVP local para celular • Abra por HTTPS ou pelo preview de um servidor local.</footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
