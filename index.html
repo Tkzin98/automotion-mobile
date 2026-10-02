@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#05070c">
-<title>AutoMotion Studio V16</title>
+<title>AutoMotion Studio V17</title>
 <link rel="manifest" href="manifesto.webmanifest">
 <link rel="stylesheet" href="estilos.css">
 </head>
@@ -16,7 +16,7 @@
 </header>
 <main class="workspace">
   <section class="hero">
-    <div class="eyebrow">V16 · AUTOMATIC MOTION DESIGN</div>
+    <div class="eyebrow">V17 · AUTOMATIC MOTION DESIGN</div>
     <h1>Do roteiro marcado<br><span>ao vídeo cinematográfico.</span></h1>
     <p>Você entrega o vídeo e a transcrição com timestamps. O AutoMotion entende cada trecho, escolhe a visualização adequada, aplica a direção de arte e sincroniza tudo sem você montar animação por animação.</p>
     <div class="heroMeta"><span>● 100% local</span><span>● sem Whisper</span><span>● MP4 + áudio</span></div>
@@ -36,8 +36,8 @@
       <label class="fileBtn"><input id="transcriptFile" type="file" accept=".srt,.vtt,.json,.txt">⌁ Importar SRT / VTT / JSON</label>
       <button id="parsePaste" class="secondary">Aplicar texto</button>
     </div>
-    <textarea id="transcriptInput" class="transcriptInput" placeholder="Cole aqui uma transcrição marcada. Ex.:\n00:00:04.120 --> 00:00:08.600\nHá 4,6 bilhões de anos...\n\nTambém aceita SRT, VTT ou JSON com start/end/text."></textarea>
-    <div class="formatHint"><span>Formatos aceitos</span><code>SRT</code><code>VTT</code><code>JSON</code><span>· sem análise de voz</span></div>
+    <textarea id="transcriptInput" class="transcriptInput" placeholder="Cole aqui uma transcrição marcada. Ex.:\n(0:08) Há 4 bilhões e 600 milhões de anos...\n(0:14) E o que aconteceu não foi calmo.\n(0:20) Não havia sol.\n\nTambém aceita (min:seg) texto, SRT, VTT ou JSON."></textarea>
+    <div class="formatHint"><span>Formatos aceitos</span><code>(0:08) texto</code><code>SRT</code><code>VTT</code><code>JSON</code><span>· sem análise de voz</span></div>
     <div id="transcriptPreview" class="transcriptPreview"><div class="empty"><b>Importe o vídeo e a transcrição</b><small>Os timestamps da sua transcrição controlam o timing dos motions.</small></div></div>
   </section>
 
@@ -100,10 +100,10 @@
     <div id="progress" class="hide"><div class="aiLine"><b>Renderização</b><span id="ppct">0%</span></div><progress id="bar" value="0" max="1"></progress><small>O processamento acontece no dispositivo.</small></div>
     <div id="result" class="result hide"></div>
   </section>
-  <div class="footNote">AutoMotion Studio V16 · editor automático de motion design · sem Whisper · direção dark documentary.</div>
+  <div class="footNote">AutoMotion Studio V17 · editor automático de motion design · sem Whisper · direção dark documentary.</div>
 </main>
 <div id="toast" class="toast"></div>
 <div id="modal" class="modal hide"><div class="modalbox"><button id="close" class="iconBtn">×</button><div class="kicker">AUTO MOTION V16</div><h3>Como usar</h3><p>1. Importe o vídeo. 2. Cole ou importe a transcrição com timestamps. 3. Escolha o design e os controles. 4. Analise. 5. Teste um trecho e depois renderize.</p><p>Os timestamps da transcrição controlam a entrada e saída dos elementos. O motor não precisa transcrever o vídeo.</p></div></div>
-<script>window.addEventListener('error',e=>{const t=document.querySelector('#toast');if(t){t.textContent='Erro no editor: '+(e.message||'verifique a página');t.classList.add('show')}});import('./app.js?v=16.0.0').catch(e=>{console.error(e);const t=document.querySelector('#toast');if(t){t.textContent='Falha ao carregar o editor';t.classList.add('show')}});</script>
+<script>window.addEventListener('error',e=>{const t=document.querySelector('#toast');if(t){t.textContent='Erro no editor: '+(e.message||'verifique a página');t.classList.add('show')}});import('./app.js?v=17.0.0').catch(e=>{console.error(e);const t=document.querySelector('#toast');if(t){t.textContent='Falha ao carregar o editor';t.classList.add('show')}});</script>
 </body>
 </html>
