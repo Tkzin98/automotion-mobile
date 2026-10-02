@@ -1,14 +1,18 @@
-# AutoMotion Studio V15
+# AutoMotion Studio V16
 
-Editor web mobile-first para Motion automático em vídeos científicos/documentais.
+Editor web mobile-first para transformar vídeo + transcrição com timestamps em motion design automático.
 
-## O que mudou
-- Whisper Small multilíngue com português definido e timestamps por palavra.
-- Whisper Base como fallback automático.
-- Áudio normalizado em mono/16 kHz antes da transcrição.
-- Extração de fatos/processos com sincronização pelo tempo real do Whisper.
-- Direção visual padrão **Dark Documentary**: cinema científico, HUD discreto, cyan/violeta, grid fino e lower-third seguro.
-- Renderização local com Mediabunny + WebCodecs.
+## V16
+- Whisper removido: a transcrição é fornecida pelo usuário.
+- Entrada de SRT, VTT, JSON e texto com intervalos.
+- Motor de análise de fatos, métricas e processos científicos.
+- Múltiplos presets de direção de arte.
+- Variação automática de linguagem visual entre cenas.
+- Posição global, densidade, entrada, modo de texto e efeitos visuais.
+- Sound design com perfis automáticos, sons sintéticos e banco de efeitos próprio.
+- Render local com Mediabunny + WebCodecs.
+- Áudio original preservado no MP4 e efeitos adicionados quando habilitados.
+- Assets astronômicos incluídos em `assets/` para cenas de formação, colapso, disco, escala temporal etc.
 
-### Importante
-Na primeira análise, o navegador baixa os arquivos do modelo Whisper pelo Hugging Face. Depois, o navegador pode reaproveitar o modelo em cache.
+## Fluxo
+Vídeo → Transcrição marcada → Entendimento → Art direction → Sound design → Preview → MP4
