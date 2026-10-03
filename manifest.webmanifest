@@ -1,9 +1,0 @@
-{
-  "name": "AutoMotion Mobile — Astronomia",
-  "short_name": "AutoMotion Astro",
-  "start_url": "./",
-  "display": "standalone",
-  "background_color": "#050713",
-  "theme_color": "#050713",
-  "description": "Visualizações automáticas de informação para documentários de astronomia."
-}
