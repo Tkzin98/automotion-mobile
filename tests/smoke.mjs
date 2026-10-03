@@ -1,0 +1,18 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {parseTranscript} from '../src/core/parser.js';
+import {buildPlan} from '../src/core/planner.js';
+const source=fs.readFileSync('../examples/solar-system.txt','utf8');
+const cues=parseTranscript(source,'solar-system.txt',160);
+assert.equal(cues.length,11);
+assert.equal(cues[0].start,8);
+assert.equal(cues.at(-1).start,62);
+const edits=buildPlan(cues);
+assert.ok(edits.length>=8);
+assert.equal(edits[0].type,'timeline');
+assert.equal(edits[0].data,'Há 4,6 bilhões de anos');
+assert.ok(edits.some(e=>e.processKind==='ignition'));
+assert.ok(edits.some(e=>e.processKind==='disk'));
+assert.ok(edits.every(e=>e.position==='right'));
+assert.ok(edits.every(e=>e.start>=0&&e.end>e.start));
+console.log(`OK — ${cues.length} cues, ${edits.length} visual scenes`);
