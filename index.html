@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#05070c">
-<title>AutoMotion Studio V17</title>
+<title>AutoMotion Studio V18</title>
 <link rel="manifest" href="manifesto.webmanifest">
 <link rel="stylesheet" href="estilos.css">
 </head>
@@ -16,7 +16,7 @@
 </header>
 <main class="workspace">
   <section class="hero">
-    <div class="eyebrow">V17 · AUTOMATIC MOTION DESIGN</div>
+    <div class="eyebrow">V18 · AUTOMATIC MOTION DESIGN</div>
     <h1>Do roteiro marcado<br><span>ao vídeo cinematográfico.</span></h1>
     <p>Você entrega o vídeo e a transcrição com timestamps. O AutoMotion entende cada trecho, escolhe a visualização adequada, aplica a direção de arte e sincroniza tudo sem você montar animação por animação.</p>
     <div class="heroMeta"><span>● 100% local</span><span>● sem Whisper</span><span>● MP4 + áudio</span></div>
@@ -44,19 +44,17 @@
   <section class="card">
     <div class="sectionTop"><div><div class="kicker">03 · DIREÇÃO DE ARTE</div><h2>Design</h2></div><span id="themeCount" class="mutedTag">1 preset</span></div>
     <div class="themeGrid" id="themeGrid">
-      <button class="themeCard selected" data-theme="darkdoc"><div class="themeThumb darkdoc"><span>04.6B</span><i></i><small>DARK DOCUMENTARY</small></div><b>Dark Documentary</b><small>cinema científico · HUD discreto</small></button>
-      <button class="themeCard" data-theme="deep"><div class="themeThumb deep"><span>WORMHOLE</span><i></i><small>DEEP SPACE</small></div><b>Deep Space</b><small>mais atmosfera · brilho controlado</small></button>
-      <button class="themeCard" data-theme="editorial"><div class="themeThumb editorial"><span>318×</span><i></i><small>SCIENCE EDITORIAL</small></div><b>Science Editorial</b><small>limpo · elegante · informativo</small></button>
-      <button class="themeCard" data-theme="lab"><div class="themeThumb lab"><span>8:20</span><i></i><small>LAB / DATA</small></div><b>Lab Data</b><small>técnico · gráficos · métricas</small></button>
-      <button class="themeCard" data-theme="mono"><div class="themeThumb mono"><span>ORBIT</span><i></i><small>MONOCHROME</small></div><b>Monochrome Lab</b><small>minimalista · alto contraste</small></button>
+      <button class="themeCard selected" data-theme="darkdoc"><div class="themeThumb darkdoc"><span>04.6B</span><i></i><small>DARK DOCUMENTARY</small></div><b>Obsidian Documentary</b><small>preto · vidro sutil · cinematográfico</small></button>
+      <button class="themeCard" data-theme="deep"><div class="themeThumb deep"><span>ORBIT</span><i></i><small>BLACK SPACE</small></div><b>Black Space</b><small>mais atmosfera · contraste baixo</small></button>
+      <button class="themeCard" data-theme="editorial"><div class="themeThumb editorial"><span>318×</span><i></i><small>BLACK EDITORIAL</small></div><b>Black Editorial</b><small>limpo · tipografia dominante</small></button>
     </div>
-    <div class="checkRow"><label><input id="themeVariation" type="checkbox"> Variações automáticas entre cenas</label><span>mantém a mesma identidade visual</span></div>
+    <div class="designNote"><span>Direção fixa</span><b>painel sempre à direita</b><small>O motor escolhe o tipo de visual, mas mantém a mesma linguagem de design.</small></div>
   </section>
 
   <section class="card">
     <div class="sectionTop"><div><div class="kicker">04 · COMPOSIÇÃO</div><h2>Layout e movimento</h2></div><span class="mutedTag">GLOBAL</span></div>
     <div class="settingsGrid">
-      <label class="setting"><span>Posição</span><select id="position"><option value="auto">Auto — área segura</option><option value="bottom">Inferior</option><option value="top">Superior</option><option value="left">Esquerda</option><option value="right">Direita</option><option value="center">Centro</option></select></label>
+      <label class="setting fixedSetting"><span>Posição</span><div class="fixedValue">Direita · safe area</div></label>
       <label class="setting"><span>Densidade visual</span><select id="density"><option value="subtle">Sutil</option><option value="balanced" selected>Equilibrada</option><option value="cinematic">Cinematográfica</option></select></label>
       <label class="setting"><span>Entrada</span><select id="motion"><option value="reveal">Reveal suave</option><option value="slide">Slide cinematográfico</option><option value="scale">Scale + glow</option><option value="scan">Scan técnico</option></select></label>
       <label class="setting"><span>Texto</span><select id="textMode"><option value="focus" selected>Foco na informação</option><option value="keyword">Palavra-chave</option><option value="caption">Legenda editorial</option></select></label>
@@ -71,25 +69,14 @@
   </section>
 
   <section class="card">
-    <div class="sectionTop"><div><div class="kicker">05 · SOM</div><h2>Sound design</h2></div><span id="soundBadge" class="mutedTag">OFF</span></div>
-    <div class="settingsGrid soundGrid">
-      <label class="setting"><span>Modo</span><select id="soundMode"><option value="off">Sem efeitos</option><option value="subtle" selected>Sutil</option><option value="cinematic">Cinematográfico</option></select></label>
-      <label class="setting"><span>Perfil</span><select id="soundProfile"><option value="auto" selected>Auto por visual</option><option value="whoosh">Whoosh</option><option value="impact">Impact</option><option value="ping">Data Ping</option><option value="pulse">Pulse</option></select></label>
-      <label class="setting"><span>Volume</span><input id="soundVolume" type="range" min="0" max="100" value="32"><output id="soundVolOut">32%</output></label>
-      <label class="setting"><span>Banco próprio</span><span class="inlineUpload"><input id="sfxFiles" type="file" accept="audio/*" multiple><b>Adicionar efeitos</b></span></label>
-    </div>
-    <div id="sfxList" class="sfxList"><span>Nenhum efeito próprio · o motor usa sons sintéticos discretos.</span></div>
-  </section>
-
-  <section class="card">
-    <div class="sectionTop"><div><div class="kicker">06 · INTELIGÊNCIA</div><h2>Plano automático</h2></div><button id="analyzeBtn" class="ghostBtn" disabled>✦ Analisar projeto</button></div>
+    <div class="sectionTop"><div><div class="kicker">05 · INTELIGÊNCIA</div><h2>Plano automático</h2></div><button id="analyzeBtn" class="ghostBtn" disabled>✦ Analisar projeto</button></div>
     <div id="aiStatus" class="aiStatus hide"><div class="aiLine"><b id="aiLabel">Preparando…</b><span id="aiPct">0%</span></div><progress id="aiBar" value="0" max="1"></progress><small id="aiDetail">—</small></div>
-    <div class="pipeline"><div><span>01</span><b>Timeline</b><small>timestamps fornecidos</small></div><i>→</i><div><span>02</span><b>Entendimento</b><small>fatos + processos</small></div><i>→</i><div><span>03</span><b>Art direction</b><small>layout + motion + som</small></div></div>
+    <div class="pipeline"><div><span>01</span><b>Timeline</b><small>timestamps fornecidos</small></div><i>→</i><div><span>02</span><b>Entendimento</b><small>fatos + processos</small></div><i>→</i><div><span>03</span><b>Art direction</b><small>layout + motion</small></div></div>
     <div id="autoList" class="autoList"><div class="empty big"><div class="emptyIcon">◌</div><b>Nenhuma cena gerada</b><small>Quando você aplicar a transcrição, o motor criará as cenas automaticamente.</small></div></div>
   </section>
 
   <section class="card">
-    <div class="sectionTop"><div><div class="kicker">07 · EXPORTAÇÃO</div><h2>Render local</h2></div><span class="engineDot"><i></i> WEB CODECS</span></div>
+    <div class="sectionTop"><div><div class="kicker">06 · EXPORTAÇÃO</div><h2>Render local</h2></div><span class="engineDot"><i></i> WEB CODECS</span></div>
     <div class="settingsGrid exportGrid">
       <label class="setting"><span>Resolução</span><select id="qualityRes"><option value="source">Origem</option><option value="1080" selected>1080p</option><option value="720">720p</option></select></label>
       <label class="setting"><span>FPS</span><select id="fps"><option>30</option><option selected>60</option></select></label>
@@ -100,10 +87,10 @@
     <div id="progress" class="hide"><div class="aiLine"><b>Renderização</b><span id="ppct">0%</span></div><progress id="bar" value="0" max="1"></progress><small>O processamento acontece no dispositivo.</small></div>
     <div id="result" class="result hide"></div>
   </section>
-  <div class="footNote">AutoMotion Studio V17 · editor automático de motion design · sem Whisper · direção dark documentary.</div>
+  <div class="footNote">AutoMotion Studio V18 · editor automático de motion design · sem Whisper · direção black documentary.</div>
 </main>
 <div id="toast" class="toast"></div>
-<div id="modal" class="modal hide"><div class="modalbox"><button id="close" class="iconBtn">×</button><div class="kicker">AUTO MOTION V16</div><h3>Como usar</h3><p>1. Importe o vídeo. 2. Cole ou importe a transcrição com timestamps. 3. Escolha o design e os controles. 4. Analise. 5. Teste um trecho e depois renderize.</p><p>Os timestamps da transcrição controlam a entrada e saída dos elementos. O motor não precisa transcrever o vídeo.</p></div></div>
-<script>window.addEventListener('error',e=>{const t=document.querySelector('#toast');if(t){t.textContent='Erro no editor: '+(e.message||'verifique a página');t.classList.add('show')}});import('./app.js?v=17.0.0').catch(e=>{console.error(e);const t=document.querySelector('#toast');if(t){t.textContent='Falha ao carregar o editor';t.classList.add('show')}});</script>
+<div id="modal" class="modal hide"><div class="modalbox"><button id="close" class="iconBtn">×</button><div class="kicker">AUTO MOTION V18</div><h3>Como usar</h3><p>1. Importe o vídeo. 2. Cole ou importe a transcrição com timestamps. 3. Escolha o design e os controles. 4. Analise. 5. Teste um trecho e depois renderize.</p><p>Os timestamps da transcrição controlam a entrada e saída dos elementos. O motor não precisa transcrever o vídeo.</p></div></div>
+<script>window.addEventListener('error',e=>{const t=document.querySelector('#toast');if(t){t.textContent='Erro no editor: '+(e.message||'verifique a página');t.classList.add('show')}});import('./app.js?v=18.0.0').catch(e=>{console.error(e);const t=document.querySelector('#toast');if(t){t.textContent='Falha ao carregar o editor';t.classList.add('show')}});</script>
 </body>
 </html>
